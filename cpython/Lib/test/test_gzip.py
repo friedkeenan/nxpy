@@ -489,9 +489,7 @@ class TestGzip(BaseTest):
             if "x" in mode:
                 support.unlink(self.filename)
             with open(self.filename, mode) as f:
-                with self.assertWarns(FutureWarning):
-                    g = gzip.GzipFile(fileobj=f)
-                with g:
+                with gzip.GzipFile(fileobj=f) as g:
                     self.assertEqual(g.mode, gzip.WRITE)
 
     def test_bytes_filename(self):

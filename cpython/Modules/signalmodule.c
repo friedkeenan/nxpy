@@ -5,10 +5,8 @@
 
 #include "Python.h"
 #include "pycore_atomic.h"
-#include "pycore_call.h"
 #include "pycore_ceval.h"
-#include "pycore_pyerrors.h"
-#include "pycore_pystate.h"    // _PyThreadState_GET()
+#include "pycore_pystate.h"
 
 #ifndef MS_WINDOWS
 #include "posixmodule.h"
@@ -26,9 +24,6 @@
 
 #ifdef HAVE_SIGNAL_H
 #include <signal.h>
-#endif
-#ifdef HAVE_SYS_SYSCALL_H
-#include <sys/syscall.h>
 #endif
 #ifdef HAVE_SYS_STAT_H
 #include <sys/stat.h>
@@ -103,6 +98,8 @@ class sigset_t_converter(CConverter):
    only oddity is that the thread executing the Python signal handler
    may not be the thread that received the signal.
 */
+
+#include "pythread.h"
 
 static volatile struct {
     _Py_atomic_int tripped;
@@ -189,6 +186,15 @@ itimer_retval(struct itimerval *iv)
 }
 #endif
 
+static int
+is_main(_PyRuntimeState *runtime)
+{
+    unsigned long thread = PyThread_get_thread_ident();
+    PyInterpreterState *interp = _PyRuntimeState_GetThreadState(runtime)->interp;
+    return (thread == runtime->main_thread
+            && interp == runtime->interpreters.main);
+}
+
 static PyObject *
 signal_default_int_handler(PyObject *self, PyObject *args)
 {
@@ -250,11 +256,10 @@ trip_signal(int sig_num)
        cleared in PyErr_CheckSignals() before .tripped. */
     _Py_atomic_store(&is_tripped, 1);
 
-    /* Signals are always handled by the main interpreter */
-    PyInterpreterState *interp = _PyRuntime.interpreters.main;
-
     /* Notify ceval.c */
-    _PyEval_SignalReceived(interp);
+    _PyRuntimeState *runtime = &_PyRuntime;
+    PyThreadState *tstate = _PyRuntimeState_GetThreadState(runtime);
+    _PyEval_SignalReceived(&runtime->ceval);
 
     /* And then write to the wakeup fd *after* setting all the globals and
        doing the _PyEval_SignalReceived. We used to write to the wakeup fd
@@ -292,9 +297,9 @@ trip_signal(int sig_num)
                 if (wakeup.warn_on_full_buffer ||
                     last_error != WSAEWOULDBLOCK)
                 {
-                    /* _PyEval_AddPendingCall() isn't signal-safe, but we
+                    /* Py_AddPendingCall() isn't signal-safe, but we
                        still use it for this exceptional case. */
-                    _PyEval_AddPendingCall(interp,
+                    _PyEval_AddPendingCall(tstate, &runtime->ceval,
                                            report_wakeup_send_error,
                                            (void *)(intptr_t) last_error);
                 }
@@ -311,9 +316,9 @@ trip_signal(int sig_num)
                 if (wakeup.warn_on_full_buffer ||
                     (errno != EWOULDBLOCK && errno != EAGAIN))
                 {
-                    /* _PyEval_AddPendingCall() isn't signal-safe, but we
+                    /* Py_AddPendingCall() isn't signal-safe, but we
                        still use it for this exceptional case. */
-                    _PyEval_AddPendingCall(interp,
+                    _PyEval_AddPendingCall(tstate, &runtime->ceval,
                                            report_wakeup_write_error,
                                            (void *)(intptr_t)errno);
                 }
@@ -470,53 +475,43 @@ signal_signal_impl(PyObject *module, int signalnum, PyObject *handler)
     }
 #endif
 
-    PyThreadState *tstate = _PyThreadState_GET();
-    if (!_Py_ThreadCanHandleSignals(tstate->interp)) {
-        _PyErr_SetString(tstate, PyExc_ValueError,
-                         "signal only works in main thread "
-                         "of the main interpreter");
+    _PyRuntimeState *runtime = &_PyRuntime;
+    if (!is_main(runtime)) {
+        PyErr_SetString(PyExc_ValueError,
+                        "signal only works in main thread");
         return NULL;
     }
     if (signalnum < 1 || signalnum >= NSIG) {
-        _PyErr_SetString(tstate, PyExc_ValueError,
-                         "signal number out of range");
+        PyErr_SetString(PyExc_ValueError,
+                        "signal number out of range");
         return NULL;
     }
-    if (handler == IgnoreHandler) {
+    if (handler == IgnoreHandler)
         func = SIG_IGN;
-    }
-    else if (handler == DefaultHandler) {
+    else if (handler == DefaultHandler)
         func = SIG_DFL;
-    }
     else if (!PyCallable_Check(handler)) {
-        _PyErr_SetString(tstate, PyExc_TypeError,
-                         "signal handler must be signal.SIG_IGN, "
-                         "signal.SIG_DFL, or a callable object");
-        return NULL;
+        PyErr_SetString(PyExc_TypeError,
+"signal handler must be signal.SIG_IGN, signal.SIG_DFL, or a callable object");
+                return NULL;
     }
-    else {
+    else
         func = signal_handler;
-    }
-
     /* Check for pending signals before changing signal handler */
-    if (_PyErr_CheckSignalsTstate(tstate)) {
+    if (_PyErr_CheckSignals()) {
         return NULL;
     }
     if (PyOS_setsig(signalnum, func) == SIG_ERR) {
         PyErr_SetFromErrno(PyExc_OSError);
         return NULL;
     }
-
     old_handler = Handlers[signalnum].func;
     Py_INCREF(handler);
     Handlers[signalnum].func = handler;
-
-    if (old_handler != NULL) {
+    if (old_handler != NULL)
         return old_handler;
-    }
-    else {
+    else
         Py_RETURN_NONE;
-    }
 }
 
 
@@ -698,11 +693,10 @@ signal_set_wakeup_fd(PyObject *self, PyObject *args, PyObject *kwds)
         return NULL;
 #endif
 
-    PyThreadState *tstate = _PyThreadState_GET();
-    if (!_Py_ThreadCanHandleSignals(tstate->interp)) {
-        _PyErr_SetString(tstate, PyExc_ValueError,
-                         "set_wakeup_fd only works in main thread "
-                         "of the main interpreter");
+    _PyRuntimeState *runtime = &_PyRuntime;
+    if (!is_main(runtime)) {
+        PyErr_SetString(PyExc_ValueError,
+                        "set_wakeup_fd only works in main thread");
         return NULL;
     }
 
@@ -728,13 +722,12 @@ signal_set_wakeup_fd(PyObject *self, PyObject *args, PyObject *kwds)
 
             fd = (int)sockfd;
             if ((SOCKET_T)fd != sockfd) {
-                _PyErr_SetString(tstate, PyExc_ValueError, "invalid fd");
+                PyErr_SetString(PyExc_ValueError, "invalid fd");
                 return NULL;
             }
 
-            if (_Py_fstat(fd, &status) != 0) {
+            if (_Py_fstat(fd, &status) != 0)
                 return NULL;
-            }
 
             /* on Windows, a file cannot be set to non-blocking mode */
         }
@@ -766,9 +759,9 @@ signal_set_wakeup_fd(PyObject *self, PyObject *args, PyObject *kwds)
         if (blocking < 0)
             return NULL;
         if (blocking) {
-            _PyErr_Format(tstate, PyExc_ValueError,
-                          "the fd %i must be in non-blocking mode",
-                          fd);
+            PyErr_Format(PyExc_ValueError,
+                         "the fd %i must be in non-blocking mode",
+                         fd);
             return NULL;
         }
     }
@@ -1261,38 +1254,6 @@ signal_pthread_kill_impl(PyObject *module, unsigned long thread_id,
 #endif   /* #if defined(HAVE_PTHREAD_KILL) */
 
 
-#if defined(__linux__) && defined(__NR_pidfd_send_signal)
-/*[clinic input]
-signal.pidfd_send_signal
-
-    pidfd: int
-    signalnum: int
-    siginfo: object = None
-    flags: int = 0
-    /
-
-Send a signal to a process referred to by a pid file descriptor.
-[clinic start generated code]*/
-
-static PyObject *
-signal_pidfd_send_signal_impl(PyObject *module, int pidfd, int signalnum,
-                              PyObject *siginfo, int flags)
-/*[clinic end generated code: output=2d59f04a75d9cbdf input=2a6543a1f4ac2000]*/
-
-{
-    if (siginfo != Py_None) {
-        PyErr_SetString(PyExc_TypeError, "siginfo must be None");
-        return NULL;
-    }
-    if (syscall(__NR_pidfd_send_signal, pidfd, signalnum, NULL, flags) < 0) {
-        PyErr_SetFromErrno(PyExc_OSError);
-        return NULL;
-    }
-    Py_RETURN_NONE;
-}
-#endif
-
-
 
 /* List of functions defined in the module -- some of the methoddefs are
    defined to nothing if the corresponding C function is not available. */
@@ -1308,7 +1269,6 @@ static PyMethodDef signal_methods[] = {
     {"set_wakeup_fd", (PyCFunction)(void(*)(void))signal_set_wakeup_fd, METH_VARARGS | METH_KEYWORDS, set_wakeup_fd_doc},
     SIGNAL_SIGINTERRUPT_METHODDEF
     SIGNAL_PAUSE_METHODDEF
-    SIGNAL_PIDFD_SEND_SIGNAL_METHODDEF
     SIGNAL_PTHREAD_KILL_METHODDEF
     SIGNAL_PTHREAD_SIGMASK_METHODDEF
     SIGNAL_SIGPENDING_METHODDEF
@@ -1675,22 +1635,24 @@ finisignal(void)
 int
 PyErr_CheckSignals(void)
 {
-    PyThreadState *tstate = _PyThreadState_GET();
-    if (!_Py_ThreadCanHandleSignals(tstate->interp)) {
+    _PyRuntimeState *runtime = &_PyRuntime;
+    if (!is_main(runtime)) {
         return 0;
     }
 
-    return _PyErr_CheckSignalsTstate(tstate);
+    return _PyErr_CheckSignals();
 }
 
 
 /* Declared in cpython/pyerrors.h */
 int
-_PyErr_CheckSignalsTstate(PyThreadState *tstate)
+_PyErr_CheckSignals(void)
 {
-    if (!_Py_atomic_load(&is_tripped)) {
+    int i;
+    PyObject *f;
+
+    if (!_Py_atomic_load(&is_tripped))
         return 0;
-    }
 
     /*
      * The is_tripped variable is meant to speed up the calls to
@@ -1708,45 +1670,30 @@ _PyErr_CheckSignalsTstate(PyThreadState *tstate)
      */
     _Py_atomic_store(&is_tripped, 0);
 
-    PyObject *frame = (PyObject *)tstate->frame;
-    if (!frame) {
-        frame = Py_None;
-    }
+    if (!(f = (PyObject *)PyEval_GetFrame()))
+        f = Py_None;
 
-    for (int i = 1; i < NSIG; i++) {
-        if (!_Py_atomic_load_relaxed(&Handlers[i].tripped)) {
-            continue;
-        }
-        _Py_atomic_store_relaxed(&Handlers[i].tripped, 0);
+    for (i = 1; i < NSIG; i++) {
+        if (_Py_atomic_load_relaxed(&Handlers[i].tripped)) {
+            PyObject *result = NULL;
+            PyObject *arglist = Py_BuildValue("(iO)", i, f);
+            _Py_atomic_store_relaxed(&Handlers[i].tripped, 0);
 
-        PyObject *arglist = Py_BuildValue("(iO)", i, frame);
-        PyObject *result;
-        if (arglist) {
-            result = _PyObject_Call(tstate, Handlers[i].func, arglist, NULL);
-            Py_DECREF(arglist);
-        }
-        else {
-            result = NULL;
-        }
-        if (!result) {
-            /* On error, re-schedule a call to _PyErr_CheckSignalsTstate() */
-            _Py_atomic_store(&is_tripped, 1);
-            return -1;
-        }
+            if (arglist) {
+                result = PyEval_CallObject(Handlers[i].func,
+                                           arglist);
+                Py_DECREF(arglist);
+            }
+            if (!result) {
+                _Py_atomic_store(&is_tripped, 1);
+                return -1;
+            }
 
-        Py_DECREF(result);
+            Py_DECREF(result);
+        }
     }
 
     return 0;
-}
-
-
-
-int
-_PyErr_CheckSignals(void)
-{
-    PyThreadState *tstate = _PyThreadState_GET();
-    return _PyErr_CheckSignalsTstate(tstate);
 }
 
 
@@ -1782,17 +1729,15 @@ PyOS_FiniInterrupts(void)
 int
 PyOS_InterruptOccurred(void)
 {
-    PyInterpreterState *interp = _PyInterpreterState_GET();
-    if (!_Py_ThreadCanHandleSignals(interp)) {
-        return 0;
+    if (_Py_atomic_load_relaxed(&Handlers[SIGINT].tripped)) {
+        _PyRuntimeState *runtime = &_PyRuntime;
+        if (!is_main(runtime)) {
+            return 0;
+        }
+        _Py_atomic_store_relaxed(&Handlers[SIGINT].tripped, 0);
+        return 1;
     }
-
-    if (!_Py_atomic_load_relaxed(&Handlers[SIGINT].tripped)) {
-        return 0;
-    }
-
-    _Py_atomic_store_relaxed(&Handlers[SIGINT].tripped, 0);
-    return 1;
+    return 0;
 }
 
 static void
@@ -1819,8 +1764,8 @@ _PySignal_AfterFork(void)
 int
 _PyOS_IsMainThread(void)
 {
-    PyInterpreterState *interp = _PyInterpreterState_GET();
-    return _Py_ThreadCanHandleSignals(interp);
+    _PyRuntimeState *runtime = &_PyRuntime;
+    return is_main(runtime);
 }
 
 #ifdef MS_WINDOWS

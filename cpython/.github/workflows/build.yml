@@ -1,19 +1,22 @@
 name: Tests
 
-# bpo-40548: "paths-ignore" is not used to skip documentation-only PRs, because
-# it prevents to mark a job as mandatory. A PR cannot be merged if a job is
-# mandatory but not scheduled because of "paths-ignore".
 on:
-  push:
-    branches:
-    - master
-    - 3.8
-    - 3.7
+  #push:
+  #  branches:
+  #  - master
+  #  - 3.8
+  #  - 3.7
+  #  paths-ignore:
+  #  - 'Doc/**'
+  #  - 'Misc/**'
   pull_request:
     branches:
     - master
     - 3.8
     - 3.7
+    paths-ignore:
+    - 'Doc/**'
+    - 'Misc/**'
 
 jobs:
   build_win32:
@@ -48,7 +51,7 @@ jobs:
     - name: Configure CPython
       run: ./configure --with-pydebug --with-openssl=/usr/local/opt/openssl --prefix=/opt/python-dev
     - name: Build CPython
-      run: make -j4
+      run: make -s -j4
     - name: Display build info
       run: make pythoninfo
     - name: Tests
@@ -58,7 +61,7 @@ jobs:
     name: 'Ubuntu'
     runs-on: ubuntu-latest
     env:
-      OPENSSL_VER: 1.1.1f
+      OPENSSL_VER: 1.1.1d
     steps:
     - uses: actions/checkout@v1
     - name: Install Dependencies
@@ -75,7 +78,7 @@ jobs:
     - name: Configure CPython
       run: ./configure --with-pydebug --with-openssl=$PWD/multissl/openssl/$OPENSSL_VER
     - name: Build CPython
-      run: make -j4
+      run: make -s -j4
     - name: Display build info
       run: make pythoninfo
     - name: Tests

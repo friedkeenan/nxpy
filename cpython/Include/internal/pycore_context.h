@@ -5,7 +5,7 @@
 #  error "this header requires Py_BUILD_CORE define"
 #endif
 
-#include "pycore_hamt.h"   /* PyHamtObject */
+#include "pycore_hamt.h"
 
 struct _pycontextobject {
     PyObject_HEAD

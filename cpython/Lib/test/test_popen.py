@@ -44,11 +44,10 @@ class PopenTest(unittest.TestCase):
 
     def test_return_code(self):
         self.assertEqual(os.popen("exit 0").close(), None)
-        status = os.popen("exit 42").close()
         if os.name == 'nt':
-            self.assertEqual(status, 42)
+            self.assertEqual(os.popen("exit 42").close(), 42)
         else:
-            self.assertEqual(os.waitstatus_to_exitcode(status), 42)
+            self.assertEqual(os.popen("exit 42").close(), 42 << 8)
 
     def test_contextmanager(self):
         with os.popen("echo hello") as f:

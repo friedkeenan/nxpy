@@ -1,6 +1,6 @@
 #define PY_SSIZE_T_CLEAN
 #include "Python.h"
-#include <stddef.h>               // offsetof()
+#include "structmember.h"
 #include "pycore_accu.h"
 #include "pycore_object.h"
 #include "_iomodule.h"
@@ -402,14 +402,14 @@ stringio_iternext(stringio *self)
     CHECK_CLOSED(self);
     ENSURE_REALIZED(self);
 
-    if (Py_IS_TYPE(self, &PyStringIO_Type)) {
+    if (Py_TYPE(self) == &PyStringIO_Type) {
         /* Skip method call overhead for speed */
         line = _stringio_readline(self, -1);
     }
     else {
         /* XXX is subclassing StringIO really supported? */
-        line = PyObject_CallMethodNoArgs((PyObject *)self,
-                                             _PyIO_str_readline);
+        line = PyObject_CallMethodObjArgs((PyObject *)self,
+                                           _PyIO_str_readline, NULL);
         if (line && !PyUnicode_Check(line)) {
             PyErr_Format(PyExc_OSError,
                          "readline() should have returned a str object, "
@@ -714,9 +714,9 @@ _io_StringIO___init___impl(stringio *self, PyObject *value,
     }
 
     if (self->readuniversal) {
-        self->decoder = PyObject_CallFunctionObjArgs(
+        self->decoder = PyObject_CallFunction(
             (PyObject *)&PyIncrementalNewlineDecoder_Type,
-            Py_None, self->readtranslate ? Py_True : Py_False, NULL);
+            "Oi", Py_None, (int) self->readtranslate);
         if (self->decoder == NULL)
             return -1;
     }

@@ -1,15 +1,13 @@
 /* Path configuration like module_search_path (sys.path) */
 
 #include "Python.h"
-#include "osdefs.h"               // DELIM
+#include "osdefs.h"
 #include "pycore_initconfig.h"
 #include "pycore_fileutils.h"
 #include "pycore_pathconfig.h"
-#include "pycore_pymem.h"         // _PyMem_SetDefaultAllocator()
+#include "pycore_pymem.h"
+#include "pycore_pystate.h"
 #include <wchar.h>
-#ifdef MS_WINDOWS
-#  include <windows.h>            // GetFullPathNameW(), MAX_PATH
-#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -242,8 +240,9 @@ config_init_module_search_paths(PyConfig *config, _PyPathConfig *pathconfig)
 
     const wchar_t *sys_path = pathconfig->module_search_path;
     const wchar_t delim = DELIM;
+    const wchar_t *p = sys_path;
     while (1) {
-        const wchar_t *p = wcschr(sys_path, delim);
+        p = wcschr(sys_path, delim);
         if (p == NULL) {
             p = sys_path + wcslen(sys_path); /* End of string */
         }
@@ -486,12 +485,6 @@ pathconfig_global_init(void)
 
 /* External interface */
 
-static void _Py_NO_RETURN
-path_out_of_memory(const char *func)
-{
-    _Py_FatalErrorFunc(func, "out of memory");
-}
-
 void
 Py_SetPath(const wchar_t *path)
 {
@@ -523,7 +516,7 @@ Py_SetPath(const wchar_t *path)
         || _Py_path_config.exec_prefix == NULL
         || _Py_path_config.module_search_path == NULL)
     {
-        path_out_of_memory(__func__);
+        Py_FatalError("Py_SetPath() failed: out of memory");
     }
 }
 
@@ -544,7 +537,7 @@ Py_SetPythonHome(const wchar_t *home)
     PyMem_SetAllocator(PYMEM_DOMAIN_RAW, &old_alloc);
 
     if (_Py_path_config.home == NULL) {
-        path_out_of_memory(__func__);
+        Py_FatalError("Py_SetPythonHome() failed: out of memory");
     }
 }
 
@@ -565,7 +558,7 @@ Py_SetProgramName(const wchar_t *program_name)
     PyMem_SetAllocator(PYMEM_DOMAIN_RAW, &old_alloc);
 
     if (_Py_path_config.program_name == NULL) {
-        path_out_of_memory(__func__);
+        Py_FatalError("Py_SetProgramName() failed: out of memory");
     }
 }
 
@@ -585,7 +578,7 @@ _Py_SetProgramFullPath(const wchar_t *program_full_path)
     PyMem_SetAllocator(PYMEM_DOMAIN_RAW, &old_alloc);
 
     if (_Py_path_config.program_full_path == NULL) {
-        path_out_of_memory(__func__);
+        Py_FatalError("_Py_SetProgramFullPath() failed: out of memory");
     }
 }
 
@@ -784,20 +777,16 @@ _PyPathConfig_ComputeSysPath0(const PyWideStringList *argv, PyObject **path0_p)
 #endif
 
 /* Search for a prefix value in an environment file (pyvenv.cfg).
-
-   - If found, copy it into *value_p: string which must be freed by
-     PyMem_RawFree().
-   - If not found, *value_p is set to NULL.
-*/
-PyStatus
+   If found, copy it into the provided buffer. */
+int
 _Py_FindEnvConfigValue(FILE *env_file, const wchar_t *key,
-                       wchar_t **value_p)
+                       wchar_t *value, size_t value_size)
 {
-    *value_p = NULL;
-
+    int result = 0; /* meaning not found */
     char buffer[MAXPATHLEN * 2 + 1];  /* allow extra for key, '=', etc. */
     buffer[Py_ARRAY_LENGTH(buffer)-1] = '\0';
 
+    fseek(env_file, 0, SEEK_SET);
     while (!feof(env_file)) {
         char * p = fgets(buffer, Py_ARRAY_LENGTH(buffer) - 1, env_file);
 
@@ -824,24 +813,18 @@ _Py_FindEnvConfigValue(FILE *env_file, const wchar_t *key,
                 if ((tok != NULL) && !wcscmp(tok, L"=")) {
                     tok = WCSTOK(NULL, L"\r\n", &state);
                     if (tok != NULL) {
-                        *value_p = _PyMem_RawWcsdup(tok);
+                        wcsncpy(value, tok, value_size - 1);
+                        value[value_size - 1] = L'\0';
+                        result = 1;
                         PyMem_RawFree(tmpbuffer);
-
-                        if (*value_p == NULL) {
-                            return _PyStatus_NO_MEMORY();
-                        }
-
-                        /* found */
-                        return _PyStatus_OK();
+                        break;
                     }
                 }
             }
             PyMem_RawFree(tmpbuffer);
         }
     }
-
-    /* not found */
-    return _PyStatus_OK();
+    return result;
 }
 
 #ifdef __cplusplus

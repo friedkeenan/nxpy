@@ -13,22 +13,16 @@ import textwrap
 import unittest
 
 from test import support
-from test.support import findfile, python_is_optimized
+from test.support import run_unittest, findfile, python_is_optimized
 
 def get_gdb_version():
     try:
-        cmd = ["gdb", "-nx", "--version"]
-        proc = subprocess.Popen(cmd,
+        proc = subprocess.Popen(["gdb", "-nx", "--version"],
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,
                                 universal_newlines=True)
         with proc:
-            version, stderr = proc.communicate()
-
-        if proc.returncode:
-            raise Exception(f"Command {' '.join(cmd)!r} failed "
-                            f"with exit code {proc.returncode}: "
-                            f"stdout={version!r} stderr={stderr!r}")
+            version = proc.communicate()[0]
     except OSError:
         # This is what "no gdb" looks like.  There may, however, be other
         # errors that manifest this way too.
@@ -236,15 +230,6 @@ class DebuggerTests(unittest.TestCase):
                                     " because the Program Counter is"
                                     " not present")
 
-        # bpo-40019: Skip the test if gdb failed to read debug information
-        # because the Python binary is optimized.
-        for pattern in (
-            '(frame information optimized out)',
-            'Unable to read information on python frame',
-        ):
-            if pattern in out:
-                raise unittest.SkipTest(f"{pattern!r} found in gdb output")
-
         return out
 
     def get_gdb_repr(self, source,
@@ -370,6 +355,7 @@ class PrettyPrintTests(DebuggerTests):
         def check_repr(text):
             try:
                 text.encode(encoding)
+                printable = True
             except UnicodeEncodeError:
                 self.assertGdbRepr(text, ascii(text))
             else:
@@ -860,66 +846,47 @@ id(42)
                                           )
         self.assertIn('Garbage-collecting', gdb_output)
 
-
     @unittest.skipIf(python_is_optimized(),
                      "Python was compiled with optimizations")
     # Some older versions of gdb will fail with
     #  "Cannot find new threads: generic error"
     # unless we add LD_PRELOAD=PATH-TO-libpthread.so.1 as a workaround
-    #
-    # gdb will also generate many erroneous errors such as:
-    #     Function "meth_varargs" not defined.
-    # This is because we are calling functions from an "external" module
-    # (_testcapimodule) rather than compiled-in functions. It seems difficult
-    # to suppress these. See also the comment in DebuggerTests.get_stack_trace
     def test_pycfunction(self):
         'Verify that "py-bt" displays invocations of PyCFunction instances'
         # Various optimizations multiply the code paths by which these are
         # called, so test a variety of calling conventions.
-        for func_name, args, expected_frame in (
-            ('meth_varargs', '', 1),
-            ('meth_varargs_keywords', '', 1),
-            ('meth_o', '[]', 1),
-            ('meth_noargs', '', 1),
-            ('meth_fastcall', '', 1),
-            ('meth_fastcall_keywords', '', 1),
+        for py_name, py_args, c_name, expected_frame_number in (
+            ('gmtime', '', 'time_gmtime', 1),  # METH_VARARGS
+            ('len', '[]', 'builtin_len', 1),  # METH_O
+            ('locals', '', 'builtin_locals', 1),  # METH_NOARGS
+            ('iter', '[]', 'builtin_iter', 1),  # METH_FASTCALL
+            ('sorted', '[]', 'builtin_sorted', 1),  # METH_FASTCALL|METH_KEYWORDS
         ):
-            for obj in (
-                '_testcapi',
-                '_testcapi.MethClass',
-                '_testcapi.MethClass()',
-                '_testcapi.MethStatic()',
+            with self.subTest(c_name):
+                cmd = ('from time import gmtime\n'  # (not always needed)
+                    'def foo():\n'
+                    f'    {py_name}({py_args})\n'
+                    'def bar():\n'
+                    '    foo()\n'
+                    'bar()\n')
+                # Verify with "py-bt":
+                gdb_output = self.get_stack_trace(
+                    cmd,
+                    breakpoint=c_name,
+                    cmds_after_breakpoint=['bt', 'py-bt'],
+                )
+                self.assertIn(f'<built-in method {py_name}', gdb_output)
 
-                # XXX: bound methods don't yet give nice tracebacks
-                # '_testcapi.MethInstance()',
-            ):
-                with self.subTest(f'{obj}.{func_name}'):
-                    cmd = textwrap.dedent(f'''
-                        import _testcapi
-                        def foo():
-                            {obj}.{func_name}({args})
-                        def bar():
-                            foo()
-                        bar()
-                    ''')
-                    # Verify with "py-bt":
-                    gdb_output = self.get_stack_trace(
-                        cmd,
-                        breakpoint=func_name,
-                        cmds_after_breakpoint=['bt', 'py-bt'],
-                    )
-                    self.assertIn(f'<built-in method {func_name}', gdb_output)
-
-                    # Verify with "py-bt-full":
-                    gdb_output = self.get_stack_trace(
-                        cmd,
-                        breakpoint=func_name,
-                        cmds_after_breakpoint=['py-bt-full'],
-                    )
-                    self.assertIn(
-                        f'#{expected_frame} <built-in method {func_name}',
-                        gdb_output,
-                    )
+                # Verify with "py-bt-full":
+                gdb_output = self.get_stack_trace(
+                    cmd,
+                    breakpoint=c_name,
+                    cmds_after_breakpoint=['py-bt-full'],
+                )
+                self.assertIn(
+                    f'#{expected_frame_number} <built-in method {py_name}',
+                    gdb_output,
+                )
 
     @unittest.skipIf(python_is_optimized(),
                      "Python was compiled with optimizations")
@@ -1000,13 +967,18 @@ class PyLocalsTests(DebuggerTests):
         self.assertMultilineMatches(bt,
                                     r".*\na = 1\nb = 2\nc = 3\n.*")
 
-
-def setUpModule():
+def test_main():
     if support.verbose:
         print("GDB version %s.%s:" % (gdb_major_version, gdb_minor_version))
         for line in gdb_version.splitlines():
             print(" " * 4 + line)
-
+    run_unittest(PrettyPrintTests,
+                 PyListTests,
+                 StackNavigationTests,
+                 PyBtTests,
+                 PyPrintTests,
+                 PyLocalsTests
+                 )
 
 if __name__ == "__main__":
-    unittest.main()
+    test_main()

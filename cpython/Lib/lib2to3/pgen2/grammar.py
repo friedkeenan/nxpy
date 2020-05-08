@@ -178,7 +178,6 @@ opmap_raw = """
 // DOUBLESLASH
 //= DOUBLESLASHEQUAL
 -> RARROW
-:= COLONEQUAL
 """
 
 opmap = {}

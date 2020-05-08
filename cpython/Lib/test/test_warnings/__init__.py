@@ -949,26 +949,27 @@ class PyWarningsDisplayTests(WarningsDisplayTests, unittest.TestCase):
             return stderr
 
         # tracemalloc disabled
-        filename = os.path.abspath(support.TESTFN)
         stderr = run('-Wd', support.TESTFN)
-        expected = textwrap.dedent(f'''
-            {filename}:5: ResourceWarning: unclosed file <...>
+        expected = textwrap.dedent('''
+            {fname}:5: ResourceWarning: unclosed file <...>
               f = None
             ResourceWarning: Enable tracemalloc to get the object allocation traceback
-        ''').strip()
+        ''')
+        expected = expected.format(fname=support.TESTFN).strip()
         self.assertEqual(stderr, expected)
 
         # tracemalloc enabled
         stderr = run('-Wd', '-X', 'tracemalloc=2', support.TESTFN)
-        expected = textwrap.dedent(f'''
-            {filename}:5: ResourceWarning: unclosed file <...>
+        expected = textwrap.dedent('''
+            {fname}:5: ResourceWarning: unclosed file <...>
               f = None
             Object allocated at (most recent call last):
-              File "{filename}", lineno 7
+              File "{fname}", lineno 7
                 func()
-              File "{filename}", lineno 3
+              File "{fname}", lineno 3
                 f = open(__file__)
-        ''').strip()
+        ''')
+        expected = expected.format(fname=support.TESTFN).strip()
         self.assertEqual(stderr, expected)
 
 
@@ -1227,6 +1228,7 @@ class BootstrapTest(unittest.TestCase):
 
 
 class FinalizationTest(unittest.TestCase):
+    @support.requires_type_collecting
     def test_finalization(self):
         # Issue #19421: warnings.warn() should not crash
         # during Python finalization
@@ -1241,8 +1243,7 @@ class A:
 a=A()
         """
         rc, out, err = assert_python_ok("-c", code)
-        self.assertEqual(err.decode().rstrip(),
-                         '<string>:7: UserWarning: test')
+        self.assertEqual(err.decode(), '<string>:7: UserWarning: test')
 
     def test_late_resource_warning(self):
         # Issue #21925: Emitting a ResourceWarning late during the Python

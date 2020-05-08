@@ -14,9 +14,10 @@ this type and there is exactly one in existence.
 */
 
 #include "Python.h"
-#include "pycore_abstract.h"      // _PyIndex_Check()
 #include "pycore_object.h"
-#include "structmember.h"         // PyMemberDef
+#include "pycore_pymem.h"
+#include "pycore_pystate.h"
+#include "structmember.h"
 
 static PyObject *
 ellipsis_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
@@ -99,8 +100,7 @@ PyObject _Py_EllipsisObject = {
  * created and then deleted again
  */
 static PySliceObject *slice_cache = NULL;
-
-void _PySlice_Fini(void)
+void PySlice_Fini(void)
 {
     PySliceObject *obj = slice_cache;
     if (obj != NULL) {
@@ -353,7 +353,7 @@ static PyMemberDef slice_members[] = {
 static PyObject*
 evaluate_slice_index(PyObject *v)
 {
-    if (_PyIndex_Check(v)) {
+    if (PyIndex_Check(v)) {
         return PyNumber_Index(v);
     }
     else {

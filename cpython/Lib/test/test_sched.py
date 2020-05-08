@@ -6,7 +6,7 @@ import unittest
 from test import support
 
 
-TIMEOUT = support.SHORT_TIMEOUT
+TIMEOUT = 10
 
 
 class Timer:
@@ -82,7 +82,7 @@ class TestCase(unittest.TestCase):
         self.assertEqual(q.get(timeout=TIMEOUT), 5)
         self.assertTrue(q.empty())
         timer.advance(1000)
-        support.join_thread(t)
+        support.join_thread(t, timeout=TIMEOUT)
         self.assertTrue(q.empty())
         self.assertEqual(timer.time(), 5)
 
@@ -137,7 +137,7 @@ class TestCase(unittest.TestCase):
         self.assertEqual(q.get(timeout=TIMEOUT), 4)
         self.assertTrue(q.empty())
         timer.advance(1000)
-        support.join_thread(t)
+        support.join_thread(t, timeout=TIMEOUT)
         self.assertTrue(q.empty())
         self.assertEqual(timer.time(), 4)
 

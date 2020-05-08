@@ -29,7 +29,7 @@ def main():
         with conn:
             print('connection from', remotehost, remoteport)
             request = b''
-            while True:
+            while 1:
                 data = conn.recv(BUFSIZE)
                 if not data:
                     break

@@ -5,7 +5,6 @@ import itertools
 import os
 import pathlib
 import posixpath
-import string
 import struct
 import subprocess
 import sys
@@ -16,7 +15,7 @@ import zipfile
 
 
 from tempfile import TemporaryFile
-from random import randint, random, randbytes
+from random import randint, random, getrandbits
 
 from test.support import script_helper
 from test.support import (TESTFN, findfile, unlink, rmtree, temp_dir, temp_cwd,
@@ -32,6 +31,9 @@ SMALL_TEST_DATA = [('_ziptest1', '1q2w3e4r5t'),
                    ('ziptest2dir/_ziptest2', 'qawsedrftg'),
                    ('ziptest2dir/ziptest3dir/_ziptest3', 'azsxdcfvgb'),
                    ('ziptest2dir/ziptest3dir/ziptest4dir/_ziptest3', '6y7u8i9o0p')]
+
+def getrandbytes(size):
+    return getrandbits(8 * size).to_bytes(size, 'little')
 
 def get_files(test):
     yield TESTFN2
@@ -321,7 +323,7 @@ class AbstractTestsWithSourceFile:
         # than requested.
         for test_size in (1, 4095, 4096, 4097, 16384):
             file_size = test_size + 1
-            junk = randbytes(file_size)
+            junk = getrandbytes(file_size)
             with zipfile.ZipFile(io.BytesIO(), "w", self.compression) as zipf:
                 zipf.writestr('foo', junk)
                 with zipf.open('foo', 'r') as fp:
@@ -568,20 +570,6 @@ class StoredTestsWithSourceFile(AbstractTestsWithSourceFile,
             zipfp.write(TESTFN)
             with open(TESTFN, "rb") as f:
                 self.assertEqual(zipfp.read(TESTFN), f.read())
-
-    def test_io_on_closed_zipextfile(self):
-        fname = "somefile.txt"
-        with zipfile.ZipFile(TESTFN2, mode="w") as zipfp:
-            zipfp.writestr(fname, "bogus")
-
-        with zipfile.ZipFile(TESTFN2, mode="r") as zipfp:
-            with zipfp.open(fname) as fid:
-                fid.close()
-                self.assertRaises(ValueError, fid.read)
-                self.assertRaises(ValueError, fid.seek, 0)
-                self.assertRaises(ValueError, fid.tell)
-                self.assertRaises(ValueError, fid.readable)
-                self.assertRaises(ValueError, fid.seekable)
 
     def test_write_to_readonly(self):
         """Check that trying to call write() on a readonly ZipFile object
@@ -1909,33 +1897,6 @@ class OtherTests(unittest.TestCase):
         self.assertRaises(ValueError,
                           zipfile.ZipInfo, 'seventies', (1979, 1, 1, 0, 0, 0))
 
-    def test_create_empty_zipinfo_repr(self):
-        """Before bpo-26185, repr() on empty ZipInfo object was failing."""
-        zi = zipfile.ZipInfo(filename="empty")
-        self.assertEqual(repr(zi), "<ZipInfo filename='empty' file_size=0>")
-
-    def test_create_empty_zipinfo_default_attributes(self):
-        """Ensure all required attributes are set."""
-        zi = zipfile.ZipInfo()
-        self.assertEqual(zi.orig_filename, "NoName")
-        self.assertEqual(zi.filename, "NoName")
-        self.assertEqual(zi.date_time, (1980, 1, 1, 0, 0, 0))
-        self.assertEqual(zi.compress_type, zipfile.ZIP_STORED)
-        self.assertEqual(zi.comment, b"")
-        self.assertEqual(zi.extra, b"")
-        self.assertIn(zi.create_system, (0, 3))
-        self.assertEqual(zi.create_version, zipfile.DEFAULT_VERSION)
-        self.assertEqual(zi.extract_version, zipfile.DEFAULT_VERSION)
-        self.assertEqual(zi.reserved, 0)
-        self.assertEqual(zi.flag_bits, 0)
-        self.assertEqual(zi.volume, 0)
-        self.assertEqual(zi.internal_attr, 0)
-        self.assertEqual(zi.external_attr, 0)
-
-        # Before bpo-26185, both were missing
-        self.assertEqual(zi.file_size, 0)
-        self.assertEqual(zi.compress_size, 0)
-
     def test_zipfile_with_short_extra_field(self):
         """If an extra field in the header is less than 4 bytes, skip it."""
         zipdata = (
@@ -2420,8 +2381,8 @@ class UnseekableTests(unittest.TestCase):
 class TestsWithMultipleOpens(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.data1 = b'111' + randbytes(10000)
-        cls.data2 = b'222' + randbytes(10000)
+        cls.data1 = b'111' + getrandbytes(10000)
+        cls.data2 = b'222' + getrandbytes(10000)
 
     def make_test_archive(self, f):
         # Create the ZIP archive
@@ -2878,7 +2839,7 @@ class TestPath(unittest.TestCase):
             a, b, g = root.iterdir()
             with a.open() as strm:
                 data = strm.read()
-            assert data == "content of a"
+            assert data == b"content of a"
 
     def test_read(self):
         for alpharep in self.zipfile_alpharep():
@@ -2971,11 +2932,6 @@ class TestPath(unittest.TestCase):
             entry.joinpath('suffix')
         # Check the file iterated all items
         assert entries.count == self.HUGE_ZIPFILE_NUM_ENTRIES
-
-    # @func_timeout.func_set_timeout(3)
-    def test_implied_dirs_performance(self):
-        data = ['/'.join(string.ascii_lowercase + str(n)) for n in range(10000)]
-        zipfile.CompleteDirs._implied_dirs(data)
 
 
 if __name__ == "__main__":

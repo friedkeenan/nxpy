@@ -78,7 +78,7 @@ def make_parser(parser_list=()):
     for parser_name in list(parser_list) + default_parser_list:
         try:
             return _create_parser(parser_name)
-        except ImportError:
+        except ImportError as e:
             import sys
             if parser_name in sys.modules:
                 # The parser module was found, but importing it

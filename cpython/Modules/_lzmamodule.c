@@ -8,7 +8,8 @@
 #define PY_SSIZE_T_CLEAN
 
 #include "Python.h"
-#include "structmember.h"         // PyMemberDef
+#include "structmember.h"
+#include "pythread.h"
 
 #include <stdarg.h>
 #include <string.h>
@@ -211,9 +212,10 @@ parse_filter_spec_lzma(PyObject *spec)
             return NULL;
     }
 
-    options = (lzma_options_lzma *)PyMem_Calloc(1, sizeof *options);
+    options = (lzma_options_lzma *)PyMem_Malloc(sizeof *options);
     if (options == NULL)
         return PyErr_NoMemory();
+    memset(options, 0, sizeof *options);
 
     if (lzma_lzma_preset(options, preset)) {
         PyMem_Free(options);
@@ -255,9 +257,10 @@ parse_filter_spec_delta(PyObject *spec)
         return NULL;
     }
 
-    options = (lzma_options_delta *)PyMem_Calloc(1, sizeof *options);
+    options = (lzma_options_delta *)PyMem_Malloc(sizeof *options);
     if (options == NULL)
         return PyErr_NoMemory();
+    memset(options, 0, sizeof *options);
     options->type = LZMA_DELTA_TYPE_BYTE;
     options->dist = dist;
     return options;
@@ -278,9 +281,10 @@ parse_filter_spec_bcj(PyObject *spec)
         return NULL;
     }
 
-    options = (lzma_options_bcj *)PyMem_Calloc(1, sizeof *options);
+    options = (lzma_options_bcj *)PyMem_Malloc(sizeof *options);
     if (options == NULL)
         return PyErr_NoMemory();
+    memset(options, 0, sizeof *options);
     options->start_offset = start_offset;
     return options;
 }
@@ -1482,13 +1486,19 @@ PyInit__lzma(void)
     if (PyModule_AddObject(m, "LZMAError", Error) == -1)
         return NULL;
 
-    if (PyModule_AddType(m, &Compressor_type) < 0) {
+    if (PyType_Ready(&Compressor_type) == -1)
         return NULL;
-    }
+    Py_INCREF(&Compressor_type);
+    if (PyModule_AddObject(m, "LZMACompressor",
+                           (PyObject *)&Compressor_type) == -1)
+        return NULL;
 
-    if (PyModule_AddType(m, &Decompressor_type) < 0) {
+    if (PyType_Ready(&Decompressor_type) == -1)
         return NULL;
-    }
+    Py_INCREF(&Decompressor_type);
+    if (PyModule_AddObject(m, "LZMADecompressor",
+                           (PyObject *)&Decompressor_type) == -1)
+        return NULL;
 
     return m;
 }

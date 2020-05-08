@@ -7,10 +7,7 @@ from importlib.metadata import (
 )
 from importlib.resources import path
 
-from test.support import requires_zlib
 
-
-@requires_zlib
 class TestZip(unittest.TestCase):
     root = 'test.test_importlib.data'
 
@@ -50,7 +47,6 @@ class TestZip(unittest.TestCase):
             assert '.whl/' in path, path
 
 
-@requires_zlib
 class TestEgg(TestZip):
     def setUp(self):
         # Find the path to the example-*.egg so we can add it to the front of

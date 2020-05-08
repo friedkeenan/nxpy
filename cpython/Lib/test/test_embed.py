@@ -267,8 +267,9 @@ class EmbeddingTests(EmbeddingTestsMixin, unittest.TestCase):
 
     def test_bpo20891(self):
         """
-        bpo-20891: Calling PyGILState_Ensure in a non-Python thread must not
-        crash.
+        bpo-20891: Calling PyGILState_Ensure in a non-Python thread before
+        calling PyEval_InitThreads() must not crash. PyGILState_Ensure() must
+        call PyEval_InitThreads() for us in this case.
         """
         out, err = self.run_embedded_interpreter("test_bpo20891")
         self.assertEqual(out, '')
@@ -347,7 +348,6 @@ class InitConfigTests(EmbeddingTestsMixin, unittest.TestCase):
         'isolated': 0,
         'use_environment': 1,
         'dev_mode': 0,
-        '_use_peg_parser': 1,
 
         'install_signal_handlers': 1,
         'use_hash_seed': 0,
@@ -356,6 +356,7 @@ class InitConfigTests(EmbeddingTestsMixin, unittest.TestCase):
         'tracemalloc': 0,
         'import_time': 0,
         'show_ref_count': 0,
+        'show_alloc_count': 0,
         'dump_refs': 0,
         'malloc_stats': 0,
 
@@ -406,7 +407,6 @@ class InitConfigTests(EmbeddingTestsMixin, unittest.TestCase):
         'check_hash_pycs_mode': 'default',
         'pathconfig_warnings': 1,
         '_init_main': 1,
-        '_isolated_interpreter': 0,
     }
     if MS_WINDOWS:
         CONFIG_COMPAT.update({
@@ -729,8 +729,8 @@ class InitConfigTests(EmbeddingTestsMixin, unittest.TestCase):
             'tracemalloc': 2,
             'import_time': 1,
             'show_ref_count': 1,
+            'show_alloc_count': 1,
             'malloc_stats': 1,
-            '_use_peg_parser': 0,
 
             'stdio_encoding': 'iso8859-1',
             'stdio_errors': 'replace',
@@ -767,8 +767,6 @@ class InitConfigTests(EmbeddingTestsMixin, unittest.TestCase):
 
             'check_hash_pycs_mode': 'always',
             'pathconfig_warnings': 0,
-
-            '_isolated_interpreter': 1,
         }
         self.check_all_configs("test_init_from_config", config, preconfig,
                                api=API_COMPAT)
@@ -795,7 +793,6 @@ class InitConfigTests(EmbeddingTestsMixin, unittest.TestCase):
             'user_site_directory': 0,
             'faulthandler': 1,
             'warnoptions': ['EnvVar'],
-            '_use_peg_parser': 0,
         }
         self.check_all_configs("test_init_compat_env", config, preconfig,
                                api=API_COMPAT)
@@ -823,7 +820,6 @@ class InitConfigTests(EmbeddingTestsMixin, unittest.TestCase):
             'user_site_directory': 0,
             'faulthandler': 1,
             'warnoptions': ['EnvVar'],
-            '_use_peg_parser': 0,
         }
         self.check_all_configs("test_init_python_env", config, preconfig,
                                api=API_PYTHON)
@@ -864,7 +860,7 @@ class InitConfigTests(EmbeddingTestsMixin, unittest.TestCase):
         }
         config = {
             'argv': ['script.py'],
-            'run_filename': os.path.abspath('script.py'),
+            'run_filename': 'script.py',
             'dev_mode': 1,
             'faulthandler': 1,
             'warnoptions': ['default'],
@@ -1075,11 +1071,11 @@ class InitConfigTests(EmbeddingTestsMixin, unittest.TestCase):
         else:
             ver = sys.version_info
             return [
-                os.path.join(prefix, sys.platlibdir,
+                os.path.join(prefix, 'lib',
                              f'python{ver.major}{ver.minor}.zip'),
-                os.path.join(prefix, sys.platlibdir,
+                os.path.join(prefix, 'lib',
                              f'python{ver.major}.{ver.minor}'),
-                os.path.join(exec_prefix, sys.platlibdir,
+                os.path.join(exec_prefix, 'lib',
                              f'python{ver.major}.{ver.minor}', 'lib-dynload'),
             ]
 
@@ -1190,7 +1186,7 @@ class InitConfigTests(EmbeddingTestsMixin, unittest.TestCase):
 
             if not MS_WINDOWS:
                 lib_dynload = os.path.join(pyvenv_home,
-                                           sys.platlibdir,
+                                           'lib',
                                            f'python{ver.major}.{ver.minor}',
                                            'lib-dynload')
                 os.makedirs(lib_dynload)
@@ -1307,14 +1303,10 @@ class AuditingTests(EmbeddingTestsMixin, unittest.TestCase):
         self.run_embedded_interpreter("test_audit_subinterpreter")
 
     def test_audit_run_command(self):
-        self.run_embedded_interpreter("test_audit_run_command",
-                                      timeout=support.SHORT_TIMEOUT,
-                                      returncode=1)
+        self.run_embedded_interpreter("test_audit_run_command", timeout=3, returncode=1)
 
     def test_audit_run_file(self):
-        self.run_embedded_interpreter("test_audit_run_file",
-                                      timeout=support.SHORT_TIMEOUT,
-                                      returncode=1)
+        self.run_embedded_interpreter("test_audit_run_file", timeout=3, returncode=1)
 
     def test_audit_run_interactivehook(self):
         startup = os.path.join(self.oldcwd, support.TESTFN) + ".py"
@@ -1323,8 +1315,7 @@ class AuditingTests(EmbeddingTestsMixin, unittest.TestCase):
             print("sys.__interactivehook__ = lambda: None", file=f)
         try:
             env = {**remove_python_envvars(), "PYTHONSTARTUP": startup}
-            self.run_embedded_interpreter("test_audit_run_interactivehook",
-                                          timeout=support.SHORT_TIMEOUT,
+            self.run_embedded_interpreter("test_audit_run_interactivehook", timeout=5,
                                           returncode=10, env=env)
         finally:
             os.unlink(startup)
@@ -1335,16 +1326,13 @@ class AuditingTests(EmbeddingTestsMixin, unittest.TestCase):
             print("pass", file=f)
         try:
             env = {**remove_python_envvars(), "PYTHONSTARTUP": startup}
-            self.run_embedded_interpreter("test_audit_run_startup",
-                                          timeout=support.SHORT_TIMEOUT,
+            self.run_embedded_interpreter("test_audit_run_startup", timeout=5,
                                           returncode=10, env=env)
         finally:
             os.unlink(startup)
 
     def test_audit_run_stdin(self):
-        self.run_embedded_interpreter("test_audit_run_stdin",
-                                      timeout=support.SHORT_TIMEOUT,
-                                      returncode=1)
+        self.run_embedded_interpreter("test_audit_run_stdin", timeout=3, returncode=1)
 
 if __name__ == "__main__":
     unittest.main()

@@ -48,19 +48,15 @@ class BaseRotatingHandler(logging.FileHandler):
     Not meant to be instantiated directly.  Instead, use RotatingFileHandler
     or TimedRotatingFileHandler.
     """
-    namer = None
-    rotator = None
-
-    def __init__(self, filename, mode, encoding=None, delay=False, errors=None):
+    def __init__(self, filename, mode, encoding=None, delay=False):
         """
         Use the specified filename for streamed logging
         """
-        logging.FileHandler.__init__(self, filename, mode=mode,
-                                     encoding=encoding, delay=delay,
-                                     errors=errors)
+        logging.FileHandler.__init__(self, filename, mode, encoding, delay)
         self.mode = mode
         self.encoding = encoding
-        self.errors = errors
+        self.namer = None
+        self.rotator = None
 
     def emit(self, record):
         """
@@ -121,8 +117,7 @@ class RotatingFileHandler(BaseRotatingHandler):
     Handler for logging to a set of files, which switches from one file
     to the next when the current file reaches a certain size.
     """
-    def __init__(self, filename, mode='a', maxBytes=0, backupCount=0,
-                 encoding=None, delay=False, errors=None):
+    def __init__(self, filename, mode='a', maxBytes=0, backupCount=0, encoding=None, delay=False):
         """
         Open the specified file and use it as the stream for logging.
 
@@ -150,8 +145,7 @@ class RotatingFileHandler(BaseRotatingHandler):
         # on each run.
         if maxBytes > 0:
             mode = 'a'
-        BaseRotatingHandler.__init__(self, filename, mode, encoding=encoding,
-                                     delay=delay, errors=errors)
+        BaseRotatingHandler.__init__(self, filename, mode, encoding, delay)
         self.maxBytes = maxBytes
         self.backupCount = backupCount
 
@@ -202,11 +196,8 @@ class TimedRotatingFileHandler(BaseRotatingHandler):
     If backupCount is > 0, when rollover is done, no more than backupCount
     files are kept - the oldest ones are deleted.
     """
-    def __init__(self, filename, when='h', interval=1, backupCount=0,
-                 encoding=None, delay=False, utc=False, atTime=None,
-                 errors=None):
-        BaseRotatingHandler.__init__(self, filename, 'a', encoding=encoding,
-                                     delay=delay, errors=errors)
+    def __init__(self, filename, when='h', interval=1, backupCount=0, encoding=None, delay=False, utc=False, atTime=None):
+        BaseRotatingHandler.__init__(self, filename, 'a', encoding, delay)
         self.when = when.upper()
         self.backupCount = backupCount
         self.utc = utc
@@ -440,11 +431,8 @@ class WatchedFileHandler(logging.FileHandler):
     This handler is based on a suggestion and patch by Chad J.
     Schroeder.
     """
-    def __init__(self, filename, mode='a', encoding=None, delay=False,
-                 errors=None):
-        logging.FileHandler.__init__(self, filename, mode=mode,
-                                     encoding=encoding, delay=delay,
-                                     errors=errors)
+    def __init__(self, filename, mode='a', encoding=None, delay=False):
+        logging.FileHandler.__init__(self, filename, mode, encoding, delay)
         self.dev, self.ino = -1, -1
         self._statstream()
 
@@ -742,10 +730,6 @@ class SysLogHandler(logging.Handler):
     LOG_CRON      = 9       #  clock daemon
     LOG_AUTHPRIV  = 10      #  security/authorization messages (private)
     LOG_FTP       = 11      #  FTP daemon
-    LOG_NTP       = 12      #  NTP subsystem
-    LOG_SECURITY  = 13      #  Log audit
-    LOG_CONSOLE   = 14      #  Log alert
-    LOG_SOLCRON   = 15      #  Scheduling daemon (Solaris)
 
     #  other codes through 15 reserved for system use
     LOG_LOCAL0    = 16      #  reserved for local use
@@ -773,30 +757,27 @@ class SysLogHandler(logging.Handler):
         }
 
     facility_names = {
-        "auth":         LOG_AUTH,
-        "authpriv":     LOG_AUTHPRIV,
-        "console":      LOG_CONSOLE,
-        "cron":         LOG_CRON,
-        "daemon":       LOG_DAEMON,
-        "ftp":          LOG_FTP,
-        "kern":         LOG_KERN,
-        "lpr":          LOG_LPR,
-        "mail":         LOG_MAIL,
-        "news":         LOG_NEWS,
-        "ntp":          LOG_NTP,
-        "security":     LOG_SECURITY,
-        "solaris-cron": LOG_SOLCRON,
-        "syslog":       LOG_SYSLOG,
-        "user":         LOG_USER,
-        "uucp":         LOG_UUCP,
-        "local0":       LOG_LOCAL0,
-        "local1":       LOG_LOCAL1,
-        "local2":       LOG_LOCAL2,
-        "local3":       LOG_LOCAL3,
-        "local4":       LOG_LOCAL4,
-        "local5":       LOG_LOCAL5,
-        "local6":       LOG_LOCAL6,
-        "local7":       LOG_LOCAL7,
+        "auth":     LOG_AUTH,
+        "authpriv": LOG_AUTHPRIV,
+        "cron":     LOG_CRON,
+        "daemon":   LOG_DAEMON,
+        "ftp":      LOG_FTP,
+        "kern":     LOG_KERN,
+        "lpr":      LOG_LPR,
+        "mail":     LOG_MAIL,
+        "news":     LOG_NEWS,
+        "security": LOG_AUTH,       #  DEPRECATED
+        "syslog":   LOG_SYSLOG,
+        "user":     LOG_USER,
+        "uucp":     LOG_UUCP,
+        "local0":   LOG_LOCAL0,
+        "local1":   LOG_LOCAL1,
+        "local2":   LOG_LOCAL2,
+        "local3":   LOG_LOCAL3,
+        "local4":   LOG_LOCAL4,
+        "local5":   LOG_LOCAL5,
+        "local6":   LOG_LOCAL6,
+        "local7":   LOG_LOCAL7,
         }
 
     #The map below appears to be trivially lowercasing the key. However,
@@ -1173,20 +1154,6 @@ class HTTPHandler(logging.Handler):
         """
         return record.__dict__
 
-    def getConnection(self, host, secure):
-        """
-        get a HTTP[S]Connection.
-
-        Override when a custom connection is required, for example if
-        there is a proxy.
-        """
-        import http.client
-        if secure:
-            connection = http.client.HTTPSConnection(host, context=self.context)
-        else:
-            connection = http.client.HTTPConnection(host)
-        return connection
-
     def emit(self, record):
         """
         Emit a record.
@@ -1194,9 +1161,12 @@ class HTTPHandler(logging.Handler):
         Send the record to the Web server as a percent-encoded dictionary
         """
         try:
-            import urllib.parse
+            import http.client, urllib.parse
             host = self.host
-            h = self.getConnection(host, self.secure)
+            if self.secure:
+                h = http.client.HTTPSConnection(host, context=self.context)
+            else:
+                h = http.client.HTTPConnection(host)
             url = self.url
             data = urllib.parse.urlencode(self.mapLogRecord(record))
             if self.method == "GET":
@@ -1272,7 +1242,7 @@ class BufferingHandler(logging.Handler):
         """
         self.acquire()
         try:
-            self.buffer.clear()
+            self.buffer = []
         finally:
             self.release()
 
@@ -1339,7 +1309,7 @@ class MemoryHandler(BufferingHandler):
             if self.target:
                 for record in self.buffer:
                     self.target.handle(record)
-                self.buffer.clear()
+                self.buffer = []
         finally:
             self.release()
 

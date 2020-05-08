@@ -217,20 +217,11 @@ write code that handles both IP versions correctly.  Address objects are
       :RFC:`4291` for details.  For example,
       ``"0000:0000:0000:0000:0000:0abc:0007:0def"`` can be compressed to
       ``"::abc:7:def"``.
-
-      Optionally, the string may also have a scope zone ID, expressed
-      with a suffix ``%scope_id``. If present, the scope ID must be non-empty,
-      and may not contain ``%``.
-      See :RFC:`4007` for details.
-      For example, ``fe80::1234%1`` might identify address ``fe80::1234`` on the first link of the node.
    2. An integer that fits into 128 bits.
    3. An integer packed into a :class:`bytes` object of length 16, big-endian.
 
-
    >>> ipaddress.IPv6Address('2001:db8::1000')
    IPv6Address('2001:db8::1000')
-   >>> ipaddress.IPv6Address('ff02::5678%1')
-   IPv6Address('ff02::5678%1')
 
    .. attribute:: compressed
 
@@ -277,12 +268,6 @@ write code that handles both IP versions correctly.  Address objects are
       ``::FFFF/96``), this property will report the embedded IPv4 address.
       For any other address, this property will be ``None``.
 
-   .. attribute:: scope_id
-
-      For scoped addresses as defined by :RFC:`4007`, this property identifies
-      the particular zone of the address's scope that the address belongs to,
-      as a string. When no scope zone is specified, this property will be ``None``.
-
    .. attribute:: sixtofour
 
       For addresses that appear to be 6to4 addresses  (starting with
@@ -314,8 +299,6 @@ the :func:`str` and :func:`int` builtin functions::
    >>> int(ipaddress.IPv6Address('::1'))
    1
 
-Note that IPv6 scoped addresses are converted to integers without scope zone ID.
-
 
 Operators
 ^^^^^^^^^
@@ -328,19 +311,14 @@ IPv6).
 Comparison operators
 """"""""""""""""""""
 
-Address objects can be compared with the usual set of comparison operators.
-Same IPv6 addresses with different scope zone IDs are not equal.
-Some examples::
+Address objects can be compared with the usual set of comparison operators.  Some
+examples::
 
    >>> IPv4Address('127.0.0.2') > IPv4Address('127.0.0.1')
    True
    >>> IPv4Address('127.0.0.2') == IPv4Address('127.0.0.1')
    False
    >>> IPv4Address('127.0.0.2') != IPv4Address('127.0.0.1')
-   True
-   >>> IPv6Address('fe80::1234') == IPv6Address('fe80::1234%1')
-   False
-   >>> IPv6Address('fe80::1234%1') != IPv6Address('fe80::1234%2')
    True
 
 
@@ -509,8 +487,7 @@ dictionaries.
       hosts are all the IP addresses that belong to the network, except the
       network address itself and the network broadcast address.  For networks
       with a mask length of 31, the network address and network broadcast
-      address are also included in the result. Networks with a mask of 32
-      will return a list containing the single host address.
+      address are also included in the result.
 
          >>> list(ip_network('192.0.2.0/29').hosts())  #doctest: +NORMALIZE_WHITESPACE
          [IPv4Address('192.0.2.1'), IPv4Address('192.0.2.2'),
@@ -518,8 +495,6 @@ dictionaries.
           IPv4Address('192.0.2.5'), IPv4Address('192.0.2.6')]
          >>> list(ip_network('192.0.2.0/31').hosts())
          [IPv4Address('192.0.2.0'), IPv4Address('192.0.2.1')]
-         >>> list(ip_network('192.0.2.1/32').hosts())
-         [IPv4Address('192.0.2.1')]
 
    .. method:: overlaps(other)
 
@@ -681,8 +656,6 @@ dictionaries.
       hosts are all the IP addresses that belong to the network, except the
       Subnet-Router anycast address.  For networks with a mask length of 127,
       the Subnet-Router anycast address is also included in the result.
-      Networks with a mask of 128 will return a list containing the
-      single host address.
 
    .. method:: overlaps(other)
    .. method:: address_exclude(network)

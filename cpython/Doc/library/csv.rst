@@ -161,8 +161,7 @@ The :mod:`csv` module defines the following classes:
    If a row has more fields than fieldnames, the remaining data is put in a
    list and stored with the fieldname specified by *restkey* (which defaults
    to ``None``).  If a non-blank row has fewer fields than fieldnames, the
-   missing values are filled-in with the value of *restval* (which defaults
-   to ``None``).
+   missing values are filled-in with ``None``.
 
    All other optional or keyword arguments are passed to the underlying
    :class:`reader` instance.

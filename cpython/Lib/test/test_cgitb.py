@@ -31,7 +31,7 @@ class TestCgitb(unittest.TestCase):
     def test_text(self):
         try:
             raise ValueError("Hello World")
-        except ValueError:
+        except ValueError as err:
             text = cgitb.text(sys.exc_info())
             self.assertIn("ValueError", text)
             self.assertIn("Hello World", text)

@@ -91,7 +91,7 @@ class MockSocket:
         handle = MockFile(self.lines)
         return handle
 
-    def sendall(self, data, flags=None):
+    def sendall(self, buffer, flags=None):
         self.last = data
         self.output.append(data)
         return len(data)

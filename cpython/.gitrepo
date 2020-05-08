@@ -5,9 +5,9 @@
 ;
 [subrepo]
 	remote = https://github.com/python/cpython
-	branch = master
-	commit = 81a5fc38e81b424869f4710f48e9371dfa2d3b77
-	parent = e614d360f3573f0a01c71f3cdd29d00c2436208d
+	branch = v3.8.2
+	commit = 7b3ab5921fa25ed8b97b6296f97c5c78aacf5447
+	parent = e047d7ebb980cbcdc3ea8d5215da14473cf3e2b5
 	method = merge
 	update = auto
 	cmdver = 0.4.1

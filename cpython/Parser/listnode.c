@@ -2,8 +2,6 @@
 /* List a node on a file */
 
 #include "Python.h"
-#include "pycore_interp.h"        // PyInterpreterState.parser
-#include "pycore_pystate.h"       // _PyInterpreterState_GET()
 #include "token.h"
 #include "node.h"
 
@@ -17,21 +15,19 @@ PyNode_ListTree(node *n)
     listnode(stdout, n);
 }
 
+static int level, atbol;
+
 static void
 listnode(FILE *fp, node *n)
 {
-    PyInterpreterState *interp = _PyInterpreterState_GET();
-
-    interp->parser.listnode.level = 0;
-    interp->parser.listnode.atbol = 1;
+    level = 0;
+    atbol = 1;
     list1node(fp, n);
 }
 
 static void
 list1node(FILE *fp, node *n)
 {
-    PyInterpreterState *interp;
-
     if (n == NULL)
         return;
     if (ISNONTERMINAL(TYPE(n))) {
@@ -40,26 +36,25 @@ list1node(FILE *fp, node *n)
             list1node(fp, CHILD(n, i));
     }
     else if (ISTERMINAL(TYPE(n))) {
-        interp = _PyInterpreterState_GET();
         switch (TYPE(n)) {
         case INDENT:
-            interp->parser.listnode.level++;
+            ++level;
             break;
         case DEDENT:
-            interp->parser.listnode.level--;
+            --level;
             break;
         default:
-            if (interp->parser.listnode.atbol) {
+            if (atbol) {
                 int i;
-                for (i = 0; i < interp->parser.listnode.level; ++i)
+                for (i = 0; i < level; ++i)
                     fprintf(fp, "\t");
-                interp->parser.listnode.atbol = 0;
+                atbol = 0;
             }
             if (TYPE(n) == NEWLINE) {
                 if (STR(n) != NULL)
                     fprintf(fp, "%s", STR(n));
                 fprintf(fp, "\n");
-                interp->parser.listnode.atbol = 1;
+                atbol = 1;
             }
             else
                 fprintf(fp, "%s ", STR(n));

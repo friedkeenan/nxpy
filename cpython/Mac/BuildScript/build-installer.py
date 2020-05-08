@@ -215,9 +215,9 @@ def library_recipes():
 
     result.extend([
           dict(
-              name="OpenSSL 1.1.1g",
-              url="https://www.openssl.org/source/openssl-1.1.1g.tar.gz",
-              checksum='76766e98997660138cdaf13a187bd234',
+              name="OpenSSL 1.1.1d",
+              url="https://www.openssl.org/source/openssl-1.1.1d.tar.gz",
+              checksum='3be209000dbc7e1b95bcdf47980a3baa',
               buildrecipe=build_universal_openssl,
               configure=None,
               install=None,
@@ -313,9 +313,9 @@ def library_recipes():
                   ),
           ),
           dict(
-              name="SQLite 3.31.1",
-              url="https://sqlite.org/2020/sqlite-autoconf-3310100.tar.gz",
-              checksum='2d0a553534c521504e3ac3ad3b90f125',
+              name="SQLite 3.28.0",
+              url="https://www.sqlite.org/2019/sqlite-autoconf-3280000.tar.gz",
+              checksum='3c68eb400f8354605736cd55400e1572',
               extra_cflags=('-Os '
                             '-DSQLITE_ENABLE_FTS5 '
                             '-DSQLITE_ENABLE_FTS4 '
@@ -1068,7 +1068,7 @@ def buildPythonDocs():
     runCommand('make clean')
     # Create virtual environment for docs builds with blurb and sphinx
     runCommand('make venv')
-    runCommand('venv/bin/python3 -m pip install -U Sphinx==2.2.0')
+    runCommand('venv/bin/python3 -m pip install -U Sphinx==2.0.1')
     runCommand('make html PYTHON=venv/bin/python')
     os.chdir(curDir)
     if not os.path.exists(docdir):
@@ -1308,6 +1308,12 @@ def buildPython():
                    os.path.join(usr_local_bin, fn))
 
     os.chdir(curdir)
+
+    if PYTHON_3:
+        # Remove the 'Current' link, that way we don't accidentally mess
+        # with an already installed version of python 2
+        os.unlink(os.path.join(rootDir, 'Library', 'Frameworks',
+                            'Python.framework', 'Versions', 'Current'))
 
 def patchFile(inPath, outPath):
     data = fileContents(inPath)

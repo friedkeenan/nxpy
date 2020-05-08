@@ -219,30 +219,20 @@ bytes() -> empty bytes object''')
             with self.subTest(meth=meth, mtip=mtip):
                 self.assertEqual(get_spec(meth), mtip)
 
-    def test_buggy_getattr_class(self):
+    def test_attribute_exception(self):
         class NoCall:
-            def __getattr__(self, name):  # Not invoked for class attribute.
-                raise IndexError  # Bug.
+            def __getattr__(self, name):
+                raise BaseException
         class CallA(NoCall):
-            def __call__(self, ci):  # Bug does not matter.
+            def __call__(oui, a, b, c):
                 pass
         class CallB(NoCall):
-            def __call__(oui, a, b, c):  # Non-standard 'self'.
+            def __call__(self, ci):
                 pass
 
         for meth, mtip  in ((NoCall, default_tip), (CallA, default_tip),
-                            (NoCall(), ''), (CallA(), '(ci)'),
-                            (CallB(), '(a, b, c)')):
-            with self.subTest(meth=meth, mtip=mtip):
-                self.assertEqual(get_spec(meth), mtip)
-
-    def test_metaclass_class(self):  # Failure case for issue 38689.
-        class Type(type):  # Type() requires 3 type args, returns class.
-            __class__ = property({}.__getitem__, {}.__setitem__)
-        class Object(metaclass=Type):
-            __slots__ = '__class__'
-        for meth, mtip  in ((Type, default_tip), (Object, default_tip),
-                            (Object(), '')):
+                            (NoCall(), ''), (CallA(), '(a, b, c)'),
+                            (CallB(), '(ci)')):
             with self.subTest(meth=meth, mtip=mtip):
                 self.assertEqual(get_spec(meth), mtip)
 

@@ -32,7 +32,6 @@ __all__ = ['get_close_matches', 'ndiff', 'restore', 'SequenceMatcher',
 
 from heapq import nlargest as _nlargest
 from collections import namedtuple as _namedtuple
-from types import GenericAlias
 
 Match = _namedtuple('Match', 'a b size')
 
@@ -130,7 +129,7 @@ class SequenceMatcher:
     set_seq2(b)
         Set the second sequence to be compared.
 
-    find_longest_match(alo=0, ahi=None, blo=0, bhi=None)
+    find_longest_match(alo, ahi, blo, bhi)
         Find longest matching block in a[alo:ahi] and b[blo:bhi].
 
     get_matching_blocks()
@@ -334,10 +333,8 @@ class SequenceMatcher:
             for elt in popular: # ditto; as fast for 1% deletion
                 del b2j[elt]
 
-    def find_longest_match(self, alo=0, ahi=None, blo=0, bhi=None):
+    def find_longest_match(self, alo, ahi, blo, bhi):
         """Find longest matching block in a[alo:ahi] and b[blo:bhi].
-
-        By default it will find the longest match in the entirety of a and b.
 
         If isjunk is not defined:
 
@@ -393,10 +390,6 @@ class SequenceMatcher:
         # the unique 'b's and then matching the first two 'a's.
 
         a, b, b2j, isbjunk = self.a, self.b, self.b2j, self.bjunk.__contains__
-        if ahi is None:
-            ahi = len(a)
-        if bhi is None:
-            bhi = len(b)
         besti, bestj, bestsize = alo, blo, 0
         # find longest junk-free match
         # during an iteration of the loop, j2len[j] = length of longest
@@ -691,9 +684,6 @@ class SequenceMatcher:
         # can't have more matches than the number of elements in the
         # shorter sequence
         return _calculate_ratio(min(la, lb), la + lb)
-
-    __class_getitem__ = classmethod(GenericAlias)
-
 
 def get_close_matches(word, possibilities, n=3, cutoff=0.6):
     """Use SequenceMatcher to return list of the best "good enough" matches.

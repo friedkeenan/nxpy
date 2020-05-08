@@ -2,7 +2,7 @@
 #define PY_SSIZE_T_CLEAN
 #include "Python.h"
 #include "pycore_tupleobject.h"
-#include <stddef.h>               // offsetof()
+#include "structmember.h"
 
 /* Itertools module written and maintained
    by Raymond D. Hettinger <python@rcn.com>
@@ -134,7 +134,7 @@ groupby_step(groupbyobject *gbo)
         newkey = newvalue;
         Py_INCREF(newvalue);
     } else {
-        newkey = PyObject_CallOneArg(gbo->keyfunc, newvalue);
+        newkey = PyObject_CallFunctionObjArgs(gbo->keyfunc, newvalue, NULL);
         if (newkey == NULL) {
             Py_DECREF(newvalue);
             return -1;
@@ -455,6 +455,8 @@ typedef struct {
     PyObject *weakreflist;
 } teeobject;
 
+static PyTypeObject teedataobject_type;
+
 static PyObject *
 teedataobject_newinternal(PyObject *it)
 {
@@ -525,7 +527,7 @@ teedataobject_traverse(teedataobject *tdo, visitproc visit, void * arg)
 static void
 teedataobject_safe_decref(PyObject *obj)
 {
-    while (obj && Py_IS_TYPE(obj, &teedataobject_type) &&
+    while (obj && Py_TYPE(obj) == &teedataobject_type &&
            Py_REFCNT(obj) == 1) {
         PyObject *nextlink = ((teedataobject *)obj)->nextlink;
         ((teedataobject *)obj)->nextlink = NULL;
@@ -612,7 +614,7 @@ itertools_teedataobject_impl(PyTypeObject *type, PyObject *it,
 
     if (len == LINKCELLS) {
         if (next != Py_None) {
-            if (!Py_IS_TYPE(next, &teedataobject_type))
+            if (Py_TYPE(next) != &teedataobject_type)
                 goto err;
             assert(tdo->nextlink == NULL);
             Py_INCREF(next);
@@ -679,6 +681,8 @@ static PyTypeObject teedataobject_type = {
     PyObject_GC_Del,                            /* tp_free */
 };
 
+
+static PyTypeObject tee_type;
 
 static PyObject *
 tee_next(teeobject *to)
@@ -945,6 +949,8 @@ typedef struct {
     int firstpass;
 } cycleobject;
 
+static PyTypeObject cycle_type;
+
 /*[clinic input]
 @classmethod
 itertools.cycle.__new__
@@ -1054,10 +1060,10 @@ cycle_reduce(cycleobject *lz, PyObject *Py_UNUSED(ignored))
             }
             Py_DECREF(res);
         }
-        return Py_BuildValue("O(N)(OO)", Py_TYPE(lz), it, lz->saved, Py_True);
+        return Py_BuildValue("O(N)(Oi)", Py_TYPE(lz), it, lz->saved, 1);
     }
-    return Py_BuildValue("O(O)(OO)", Py_TYPE(lz), lz->it, lz->saved,
-                         lz->firstpass ? Py_True : Py_False);
+    return Py_BuildValue("O(O)(Oi)", Py_TYPE(lz), lz->it, lz->saved,
+                         lz->firstpass);
 }
 
 static PyObject *
@@ -1141,6 +1147,8 @@ typedef struct {
     long start;
 } dropwhileobject;
 
+static PyTypeObject dropwhile_type;
+
 /*[clinic input]
 @classmethod
 itertools.dropwhile.__new__
@@ -1211,7 +1219,7 @@ dropwhile_next(dropwhileobject *lz)
         if (lz->start == 1)
             return item;
 
-        good = PyObject_CallOneArg(lz->func, item);
+        good = PyObject_CallFunctionObjArgs(lz->func, item, NULL);
         if (good == NULL) {
             Py_DECREF(item);
             return NULL;
@@ -1306,6 +1314,8 @@ typedef struct {
     long stop;
 } takewhileobject;
 
+static PyTypeObject takewhile_type;
+
 /*[clinic input]
 @classmethod
 itertools.takewhile.__new__
@@ -1372,7 +1382,7 @@ takewhile_next(takewhileobject *lz)
     if (item == NULL)
         return NULL;
 
-    good = PyObject_CallOneArg(lz->func, item);
+    good = PyObject_CallFunctionObjArgs(lz->func, item, NULL);
     if (good == NULL) {
         Py_DECREF(item);
         return NULL;
@@ -1724,6 +1734,8 @@ typedef struct {
     PyObject *it;
 } starmapobject;
 
+static PyTypeObject starmap_type;
+
 /*[clinic input]
 @classmethod
 itertools.starmap.__new__
@@ -2028,8 +2040,6 @@ static PyMethodDef chain_methods[] = {
      reduce_doc},
     {"__setstate__",    (PyCFunction)chain_setstate,    METH_O,
      setstate_doc},
-    {"__class_getitem__",    (PyCFunction)Py_GenericAlias,
-    METH_O|METH_CLASS,       PyDoc_STR("See PEP 585")},
     {NULL,              NULL}           /* sentinel */
 };
 
@@ -2442,6 +2452,8 @@ typedef struct {
     int stopped;            /* set to 1 when the iterator is exhausted */
 } combinationsobject;
 
+static PyTypeObject combinations_type;
+
 
 /*[clinic input]
 @classmethod
@@ -2774,6 +2786,8 @@ typedef struct {
     int stopped;            /* set to 1 when the cwr iterator is exhausted */
 } cwrobject;
 
+static PyTypeObject cwr_type;
+
 /*[clinic input]
 @classmethod
 itertools.combinations_with_replacement.__new__
@@ -3062,15 +3076,12 @@ static PyTypeObject cwr_type = {
 /* permutations object ********************************************************
 
 def permutations(iterable, r=None):
-    # permutations('ABCD', 2) --> AB AC AD BA BC BD CA CB CD DA DB DC
-    # permutations(range(3)) --> 012 021 102 120 201 210
+    'permutations(range(3), 2) --> (0,1) (0,2) (1,0) (1,2) (2,0) (2,1)'
     pool = tuple(iterable)
     n = len(pool)
     r = n if r is None else r
-    if r > n:
-        return
-    indices = list(range(n))
-    cycles = list(range(n, n-r, -1))
+    indices = range(n)
+    cycles = range(n-r+1, n+1)[::-1]
     yield tuple(pool[i] for i in indices[:r])
     while n:
         for i in reversed(range(r)):
@@ -3096,6 +3107,8 @@ typedef struct {
     Py_ssize_t r;           /* size of result tuple */
     int stopped;            /* set to 1 when the iterator is exhausted */
 } permutationsobject;
+
+static PyTypeObject permutations_type;
 
 /*[clinic input]
 @classmethod
@@ -3456,6 +3469,8 @@ typedef struct {
     PyObject *initial;
 } accumulateobject;
 
+static PyTypeObject accumulate_type;
+
 /*[clinic input]
 @classmethod
 itertools.accumulate.__new__
@@ -3667,6 +3682,8 @@ typedef struct {
     PyObject *selectors;
 } compressobject;
 
+static PyTypeObject compress_type;
+
 /*[clinic input]
 @classmethod
 itertools.compress.__new__
@@ -3825,6 +3842,8 @@ typedef struct {
     PyObject *it;
 } filterfalseobject;
 
+static PyTypeObject filterfalse_type;
+
 /*[clinic input]
 @classmethod
 itertools.filterfalse.__new__
@@ -3896,7 +3915,7 @@ filterfalse_next(filterfalseobject *lz)
             ok = PyObject_IsTrue(item);
         } else {
             PyObject *good;
-            good = PyObject_CallOneArg(lz->func, item);
+            good = PyObject_CallFunctionObjArgs(lz->func, item, NULL);
             if (good == NULL) {
                 Py_DECREF(item);
                 return NULL;
@@ -3994,6 +4013,8 @@ slow_mode:  when cnt == PY_SSIZE_T_MAX, step is not int(1), or cnt is a float.
     Step may be zero -- effectively a slow version of repeat(cnt).
     Either long_cnt or long_step may be a float, Fraction, or Decimal.
 */
+
+static PyTypeObject count_type;
 
 /*[clinic input]
 @classmethod
@@ -4232,17 +4253,17 @@ repeat_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
     repeatobject *ro;
     PyObject *element;
-    Py_ssize_t cnt = -1, n_args;
+    Py_ssize_t cnt = -1, n_kwds = 0;
     static char *kwargs[] = {"object", "times", NULL};
 
-    n_args = PyTuple_GET_SIZE(args);
-    if (kwds != NULL)
-        n_args += PyDict_GET_SIZE(kwds);
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|n:repeat", kwargs,
                                      &element, &cnt))
         return NULL;
+
+    if (kwds != NULL)
+        n_kwds = PyDict_GET_SIZE(kwds);
     /* Does user supply times argument? */
-    if (n_args == 2 && cnt < 0)
+    if ((PyTuple_Size(args) + n_kwds == 2) && cnt < 0)
         cnt = 0;
 
     ro = (repeatobject *)type->tp_alloc(type, 0);
@@ -4677,9 +4698,31 @@ combinations(p, r)\n\
 combinations_with_replacement(p, r)\n\
 ");
 
-static int
-itertoolsmodule_exec(PyObject *m)
+
+static PyMethodDef module_methods[] = {
+    ITERTOOLS_TEE_METHODDEF
+    {NULL,              NULL}           /* sentinel */
+};
+
+
+static struct PyModuleDef itertoolsmodule = {
+    PyModuleDef_HEAD_INIT,
+    "itertools",
+    module_doc,
+    -1,
+    module_methods,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+};
+
+PyMODINIT_FUNC
+PyInit_itertools(void)
 {
+    int i;
+    PyObject *m;
+    const char *name;
     PyTypeObject *typelist[] = {
         &accumulate_type,
         &combinations_type,
@@ -4700,45 +4743,22 @@ itertoolsmodule_exec(PyObject *m)
         &groupby_type,
         &_grouper_type,
         &tee_type,
-        &teedataobject_type
+        &teedataobject_type,
+        NULL
     };
 
-    Py_SET_TYPE(&teedataobject_type, &PyType_Type);
+    Py_TYPE(&teedataobject_type) = &PyType_Type;
+    m = PyModule_Create(&itertoolsmodule);
+    if (m == NULL)
+        return NULL;
 
-    for (size_t i = 0; i < Py_ARRAY_LENGTH(typelist); i++) {
-        if (PyModule_AddType(m, typelist[i]) < 0) {
-            return -1;
-        }
+    for (i=0 ; typelist[i] != NULL ; i++) {
+        if (PyType_Ready(typelist[i]) < 0)
+            return NULL;
+        name = _PyType_Name(typelist[i]);
+        Py_INCREF(typelist[i]);
+        PyModule_AddObject(m, name, (PyObject *)typelist[i]);
     }
 
-    return 0;
-}
-
-static struct PyModuleDef_Slot itertoolsmodule_slots[] = {
-    {Py_mod_exec, itertoolsmodule_exec},
-    {0, NULL}
-};
-
-static PyMethodDef module_methods[] = {
-    ITERTOOLS_TEE_METHODDEF
-    {NULL, NULL} /* sentinel */
-};
-
-
-static struct PyModuleDef itertoolsmodule = {
-    PyModuleDef_HEAD_INIT,
-    "itertools",
-    module_doc,
-    0,
-    module_methods,
-    itertoolsmodule_slots,
-    NULL,
-    NULL,
-    NULL
-};
-
-PyMODINIT_FUNC
-PyInit_itertools(void)
-{
-    return PyModuleDef_Init(&itertoolsmodule);
+    return m;
 }

@@ -8,6 +8,7 @@
 
 import array
 from binascii import unhexlify
+import functools
 import hashlib
 import importlib
 import itertools
@@ -18,6 +19,7 @@ import unittest
 import warnings
 from test import support
 from test.support import _4G, bigmemtest, import_fresh_module
+from test.support import requires_hashdigest
 from http.client import HTTPException
 
 # Were we compiled --with-pydebug or with #define Py_DEBUG?
@@ -174,6 +176,16 @@ class HashLibTestCase(unittest.TestCase):
         constructors = self.constructors_to_test.values()
         return itertools.chain.from_iterable(constructors)
 
+    @support.refcount_test
+    @unittest.skipIf(c_hashlib is None, 'Require _hashlib module')
+    def test_refleaks_in_hash___init__(self):
+        gettotalrefcount = support.get_attribute(sys, 'gettotalrefcount')
+        sha1_hash = c_hashlib.new('sha1')
+        refs_before = gettotalrefcount()
+        for i in range(100):
+            sha1_hash.__init__('sha1')
+        self.assertAlmostEqual(gettotalrefcount() - refs_before, 0, delta=10)
+
     def test_hash_array(self):
         a = array.array("b", range(10))
         for cons in self.hash_constructors:
@@ -191,18 +203,6 @@ class HashLibTestCase(unittest.TestCase):
     def test_algorithms_available(self):
         self.assertTrue(set(hashlib.algorithms_guaranteed).
                             issubset(hashlib.algorithms_available))
-
-    def test_usedforsecurity(self):
-        for cons in self.hash_constructors:
-            cons(usedforsecurity=True)
-            cons(usedforsecurity=False)
-            cons(b'', usedforsecurity=True)
-            cons(b'', usedforsecurity=False)
-        hashlib.new("sha256", usedforsecurity=True)
-        hashlib.new("sha256", usedforsecurity=False)
-        if self._hashlib is not None:
-            self._hashlib.new("md5", usedforsecurity=False)
-            self._hashlib.openssl_md5(usedforsecurity=False)
 
     def test_unknown_hash(self):
         self.assertRaises(ValueError, hashlib.new, 'spam spam spam spam spam')
@@ -854,11 +854,6 @@ class HashLibTestCase(unittest.TestCase):
             thread.join()
 
         self.assertEqual(expected_hash, hasher.hexdigest())
-
-    @unittest.skipUnless(hasattr(c_hashlib, 'get_fips_mode'),
-                         'need _hashlib.get_fips_mode')
-    def test_get_fips_mode(self):
-        self.assertIsInstance(c_hashlib.get_fips_mode(), int)
 
 
 class KDFTests(unittest.TestCase):

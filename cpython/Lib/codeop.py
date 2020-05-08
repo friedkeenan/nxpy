@@ -80,7 +80,7 @@ def _maybe_compile(compiler, source, filename, symbol):
 
     try:
         code = compiler(source, filename, symbol)
-    except SyntaxError:
+    except SyntaxError as err:
         pass
 
     try:
@@ -133,7 +133,7 @@ class Compile:
         self.flags = PyCF_DONT_IMPLY_DEDENT
 
     def __call__(self, source, filename, symbol):
-        codeob = compile(source, filename, symbol, self.flags, True)
+        codeob = compile(source, filename, symbol, self.flags, 1)
         for feature in _features:
             if codeob.co_flags & feature.compiler_flag:
                 self.flags |= feature.compiler_flag

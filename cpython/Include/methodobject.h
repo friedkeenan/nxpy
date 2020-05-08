@@ -13,7 +13,7 @@ extern "C" {
 
 PyAPI_DATA(PyTypeObject) PyCFunction_Type;
 
-#define PyCFunction_Check(op) (Py_IS_TYPE(op, &PyCFunction_Type) || (PyType_IsSubtype(Py_TYPE(op), &PyCFunction_Type)))
+#define PyCFunction_Check(op) (Py_TYPE(op) == &PyCFunction_Type)
 
 typedef PyObject *(*PyCFunction)(PyObject *, PyObject *);
 typedef PyObject *(*_PyCFunctionFast) (PyObject *, PyObject *const *, Py_ssize_t);
@@ -22,14 +22,31 @@ typedef PyObject *(*PyCFunctionWithKeywords)(PyObject *, PyObject *,
 typedef PyObject *(*_PyCFunctionFastWithKeywords) (PyObject *,
                                                    PyObject *const *, Py_ssize_t,
                                                    PyObject *);
-typedef PyObject *(*PyCMethod)(PyObject *, PyTypeObject *, PyObject *const *,
-                               size_t, PyObject *);
+typedef PyObject *(*PyNoArgsFunction)(PyObject *);
 
 PyAPI_FUNC(PyCFunction) PyCFunction_GetFunction(PyObject *);
 PyAPI_FUNC(PyObject *) PyCFunction_GetSelf(PyObject *);
 PyAPI_FUNC(int) PyCFunction_GetFlags(PyObject *);
 
-Py_DEPRECATED(3.9) PyAPI_FUNC(PyObject *) PyCFunction_Call(PyObject *, PyObject *, PyObject *);
+/* Macros for direct access to these values. Type checks are *not*
+   done, so use with care. */
+#ifndef Py_LIMITED_API
+#define PyCFunction_GET_FUNCTION(func) \
+        (((PyCFunctionObject *)func) -> m_ml -> ml_meth)
+#define PyCFunction_GET_SELF(func) \
+        (((PyCFunctionObject *)func) -> m_ml -> ml_flags & METH_STATIC ? \
+         NULL : ((PyCFunctionObject *)func) -> m_self)
+#define PyCFunction_GET_FLAGS(func) \
+        (((PyCFunctionObject *)func) -> m_ml -> ml_flags)
+#endif
+PyAPI_FUNC(PyObject *) PyCFunction_Call(PyObject *, PyObject *, PyObject *);
+
+#ifndef Py_LIMITED_API
+PyAPI_FUNC(PyObject *) _PyCFunction_FastCallDict(PyObject *func,
+    PyObject *const *args,
+    Py_ssize_t nargs,
+    PyObject *kwargs);
+#endif
 
 struct PyMethodDef {
     const char  *ml_name;   /* The name of the built-in function/method */
@@ -43,13 +60,6 @@ typedef struct PyMethodDef PyMethodDef;
 #define PyCFunction_New(ML, SELF) PyCFunction_NewEx((ML), (SELF), NULL)
 PyAPI_FUNC(PyObject *) PyCFunction_NewEx(PyMethodDef *, PyObject *,
                                          PyObject *);
-
-#if !defined(Py_LIMITED_API) || Py_LIMITED_API+0 >= 0x03090000
-#define PyCFunction_NewEx(ML, SELF, MOD) PyCMethod_New((ML), (SELF), (MOD), NULL)
-PyAPI_FUNC(PyObject *) PyCMethod_New(PyMethodDef *, PyObject *,
-                                     PyObject *, PyTypeObject *);
-#endif
-
 
 /* Flag passed to newmethodobject */
 /* #define METH_OLDARGS  0x0000   -- unsupported now */
@@ -83,24 +93,36 @@ PyAPI_FUNC(PyObject *) PyCMethod_New(PyMethodDef *, PyObject *,
 #define METH_STACKLESS 0x0000
 #endif
 
-/* METH_METHOD means the function stores an
- * additional reference to the class that defines it;
- * both self and class are passed to it.
- * It uses PyCMethodObject instead of PyCFunctionObject.
- * May not be combined with METH_NOARGS, METH_O, METH_CLASS or METH_STATIC.
- */
+#ifndef Py_LIMITED_API
+typedef struct {
+    PyObject_HEAD
+    PyMethodDef *m_ml; /* Description of the C function to call */
+    PyObject    *m_self; /* Passed as 'self' arg to the C func, can be NULL */
+    PyObject    *m_module; /* The __module__ attribute, can be anything */
+    PyObject    *m_weakreflist; /* List of weak references */
+    vectorcallfunc vectorcall;
+} PyCFunctionObject;
 
-#if !defined(Py_LIMITED_API) || Py_LIMITED_API+0 >= 0x03090000
-#define METH_METHOD 0x0200
+PyAPI_FUNC(PyObject *) _PyMethodDef_RawFastCallDict(
+    PyMethodDef *method,
+    PyObject *self,
+    PyObject *const *args,
+    Py_ssize_t nargs,
+    PyObject *kwargs);
+
+PyAPI_FUNC(PyObject *) _PyMethodDef_RawFastCallKeywords(
+    PyMethodDef *method,
+    PyObject *self,
+    PyObject *const *args,
+    Py_ssize_t nargs,
+    PyObject *kwnames);
 #endif
 
+PyAPI_FUNC(int) PyCFunction_ClearFreeList(void);
 
 #ifndef Py_LIMITED_API
-
-#define Py_CPYTHON_METHODOBJECT_H
-#include  "cpython/methodobject.h"
-#undef Py_CPYTHON_METHODOBJECT_H
-
+PyAPI_FUNC(void) _PyCFunction_DebugMallocStats(FILE *out);
+PyAPI_FUNC(void) _PyMethod_DebugMallocStats(FILE *out);
 #endif
 
 #ifdef __cplusplus

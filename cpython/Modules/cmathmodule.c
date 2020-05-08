@@ -3,7 +3,6 @@
 /* much code borrowed from mathmodule.c */
 
 #include "Python.h"
-#include "pycore_dtoa.h"
 #include "_math.h"
 /* we need DBL_MAX, DBL_MIN, DBL_EPSILON, DBL_MANT_DIG and FLT_RADIX from
    float.h.  We assume that FLT_RADIX is either 2 or 16. */
@@ -18,7 +17,7 @@ module cmath
 /*[python input]
 class Py_complex_protected_converter(Py_complex_converter):
     def modify(self):
-        return 'errno = 0;'
+        return 'errno = 0; PyFPE_START_PROTECT("complex function", goto exit);'
 
 
 class Py_complex_protected_return_converter(CReturnConverter):
@@ -27,6 +26,7 @@ class Py_complex_protected_return_converter(CReturnConverter):
     def render(self, function, data):
         self.declare(data)
         data.return_conversion.append("""
+PyFPE_END_PROTECT(_return_value);
 if (errno == EDOM) {
     PyErr_SetString(PyExc_ValueError, "math domain error");
     goto exit;
@@ -40,7 +40,7 @@ else {
 }
 """.strip())
 [python start generated code]*/
-/*[python end generated code: output=da39a3ee5e6b4b0d input=8b27adb674c08321]*/
+/*[python end generated code: output=da39a3ee5e6b4b0d input=345daa075b1028e7]*/
 
 #if (FLT_RADIX != 2 && FLT_RADIX != 16)
 #error "Modules/cmathmodule.c expects FLT_RADIX to be 2 or 16"
@@ -960,6 +960,7 @@ cmath_log_impl(PyObject *module, Py_complex x, PyObject *y_obj)
     Py_complex y;
 
     errno = 0;
+    PyFPE_START_PROTECT("complex function", return 0)
     x = c_log(x);
     if (y_obj != NULL) {
         y = PyComplex_AsCComplex(y_obj);
@@ -969,6 +970,7 @@ cmath_log_impl(PyObject *module, Py_complex x, PyObject *y_obj)
         y = c_log(y);
         x = _Py_c_quot(x, y);
     }
+    PyFPE_END_PROTECT(x)
     if (errno != 0)
         return math_error();
     return PyComplex_FromCComplex(x);
@@ -1006,7 +1008,9 @@ cmath_phase_impl(PyObject *module, Py_complex z)
     double phi;
 
     errno = 0;
+    PyFPE_START_PROTECT("arg function", return 0)
     phi = c_atan2(z);
+    PyFPE_END_PROTECT(phi)
     if (errno != 0)
         return math_error();
     else
@@ -1031,8 +1035,10 @@ cmath_polar_impl(PyObject *module, Py_complex z)
     double r, phi;
 
     errno = 0;
+    PyFPE_START_PROTECT("polar function", return 0)
     phi = c_atan2(z); /* should not cause any exception */
     r = _Py_c_abs(z); /* sets errno to ERANGE on overflow */
+    PyFPE_END_PROTECT(r)
     if (errno != 0)
         return math_error();
     else
@@ -1068,6 +1074,7 @@ cmath_rect_impl(PyObject *module, double r, double phi)
 {
     Py_complex z;
     errno = 0;
+    PyFPE_START_PROTECT("rect function", return 0)
 
     /* deal with special values */
     if (!Py_IS_FINITE(r) || !Py_IS_FINITE(phi)) {
@@ -1109,6 +1116,7 @@ cmath_rect_impl(PyObject *module, double r, double phi)
         errno = 0;
     }
 
+    PyFPE_END_PROTECT(z)
     if (errno != 0)
         return math_error();
     else

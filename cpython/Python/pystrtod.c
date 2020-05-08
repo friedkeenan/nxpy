@@ -1,7 +1,6 @@
 /* -*- Mode: C; c-file-style: "python" -*- */
 
 #include <Python.h>
-#include "pycore_dtoa.h"
 #include <locale.h>
 
 /* Case-insensitive string match used for nan and inf detection; t should be
@@ -343,7 +342,9 @@ PyOS_string_to_double(const char *s,
     char *fail_pos;
 
     errno = 0;
+    PyFPE_START_PROTECT("PyOS_string_to_double", return -1.0)
     x = _PyOS_ascii_strtod(s, &fail_pos);
+    PyFPE_END_PROTECT(x)
 
     if (errno == ENOMEM) {
         PyErr_NoMemory();

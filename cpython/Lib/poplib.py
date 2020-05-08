@@ -107,8 +107,6 @@ class POP3:
         self.welcome = self._getresp()
 
     def _create_socket(self, timeout):
-        if timeout is not None and not timeout:
-            raise ValueError('Non-blocking socket (timeout=0) is not supported')
         return socket.create_connection((self.host, self.port), timeout)
 
     def _putline(self, line):
@@ -387,7 +385,7 @@ class POP3:
             for capline in rawcaps:
                 capnm, capargs = _parsecap(capline)
                 caps[capnm] = capargs
-        except error_proto:
+        except error_proto as _err:
             raise error_proto('-ERR CAPA not supported by server')
         return caps
 

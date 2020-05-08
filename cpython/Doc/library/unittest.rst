@@ -910,10 +910,10 @@ Test cases
       .. versionadded:: 3.1
 
 
-   .. method:: assertIn(member, container, msg=None)
-               assertNotIn(member, container, msg=None)
+   .. method:: assertIn(first, second, msg=None)
+               assertNotIn(first, second, msg=None)
 
-      Test that *member* is (or is not) in *container*.
+      Test that *first* is (or is not) in *second*.
 
       .. versionadded:: 3.1
 
@@ -1427,7 +1427,7 @@ Test cases
          :class:`TextTestResult` in Python 3.2.
 
 
-   .. method:: addCleanup(function, /, *args, **kwargs)
+   .. method:: addCleanup(function, *args, **kwargs)
 
       Add a function to be called after :meth:`tearDown` to cleanup resources
       used during the test. Functions will be called in reverse order to the

@@ -17,7 +17,7 @@ Objects, values and types
 
 :dfn:`Objects` are Python's abstraction for data.  All data in a Python program
 is represented by objects or by relations between objects. (In a sense, and in
-conformance to Von Neumann's model of a "stored program computer", code is also
+conformance to Von Neumann's model of a "stored program computer," code is also
 represented by objects.)
 
 .. index::
@@ -156,17 +156,12 @@ NotImplemented
    object is accessed through the built-in name ``NotImplemented``. Numeric methods
    and rich comparison methods should return this value if they do not implement the
    operation for the operands provided.  (The interpreter will then try the
-   reflected operation, or some other fallback, depending on the operator.)  It
-   should not be evaluated in a boolean context.
+   reflected operation, or some other fallback, depending on the operator.)  Its
+   truth value is true.
 
    See
    :ref:`implementing-the-arithmetic-operations`
    for more details.
-
-   .. versionchanged:: 3.9
-      Evaluating ``NotImplemented`` in a boolean context is deprecated. While
-      it currently evaluates as true, it will emit a :exc:`DeprecationWarning`.
-      It will raise a :exc:`TypeError` in a future version of Python.
 
 
 Ellipsis
@@ -425,11 +420,6 @@ Mappings
       equal (e.g., ``1`` and ``1.0``) then they can be used interchangeably to index
       the same dictionary entry.
 
-      Dictionaries preserve insertion order, meaning that keys will be produced
-      in the same order they were added sequentially over the dictionary.
-      Replacing an existing key does not change the order, however removing a key
-      and re-inserting it will add it to the end instead of keeping its old place.
-
       Dictionaries are mutable; they can be created by the ``{...}`` notation (see
       section :ref:`dict`).
 
@@ -440,11 +430,6 @@ Mappings
       The extension modules :mod:`dbm.ndbm` and :mod:`dbm.gnu` provide
       additional examples of mapping types, as does the :mod:`collections`
       module.
-
-      .. versionchanged:: 3.7
-         Dictionaries did not preserve insertion order in versions of Python before 3.6.
-         In CPython 3.6, insertion order was preserved, but it was considered
-         an implementation detail at that time rather than a language guarantee.
 
 Callable types
    .. index::
@@ -1350,7 +1335,7 @@ Basic customization
 
    .. versionchanged:: 3.7
       ``object.__format__(x, '')`` is now equivalent to ``str(x)`` rather
-      than ``format(str(x), '')``.
+      than ``format(str(self), '')``.
 
 
 .. _richcmpfuncs:
@@ -1745,7 +1730,7 @@ the descriptor defines :meth:`__set__` and/or :meth:`__delete__`, it is a data
 descriptor; if it defines neither, it is a non-data descriptor.  Normally, data
 descriptors define both :meth:`__get__` and :meth:`__set__`, while non-data
 descriptors have just the :meth:`__get__` method.  Data descriptors with
-:meth:`__get__` and :meth:`__set__` (and/or :meth:`__delete__`) defined always override a redefinition in an
+:meth:`__set__` and :meth:`__get__` defined always override a redefinition in an
 instance dictionary.  In contrast, non-data descriptors can be overridden by
 instances.
 
@@ -1966,7 +1951,7 @@ namespace returned by ``__prepare__`` is passed in to ``__new__``, but when
 the final class object is created the namespace is copied into a new ``dict``.
 
 If the metaclass has no ``__prepare__`` attribute, then the class namespace
-is initialised as an empty ordered mapping.
+is initialised as an empty :func:`dict`.
 
 .. seealso::
 

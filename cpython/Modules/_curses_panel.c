@@ -21,25 +21,19 @@ typedef struct {
     PyObject *PyCursesPanel_Type;
 } _curses_panelstate;
 
-static inline _curses_panelstate*
-get_curses_panelstate(PyObject *module)
-{
-    void *state = PyModule_GetState(module);
-    assert(state != NULL);
-    return (_curses_panelstate *)state;
-}
+#define _curses_panelstate(o) ((_curses_panelstate *)PyModule_GetState(o))
 
 static int
 _curses_panel_clear(PyObject *m)
 {
-    Py_CLEAR(get_curses_panelstate(m)->PyCursesError);
+    Py_CLEAR(_curses_panelstate(m)->PyCursesError);
     return 0;
 }
 
 static int
 _curses_panel_traverse(PyObject *m, visitproc visit, void *arg)
 {
-    Py_VISIT(get_curses_panelstate(m)->PyCursesError);
+    Py_VISIT(_curses_panelstate(m)->PyCursesError);
     return 0;
 }
 
@@ -89,7 +83,7 @@ typedef struct {
 } PyCursesPanelObject;
 
 #define PyCursesPanel_Check(v)  \
- Py_IS_TYPE(v, _curses_panelstate_global->PyCursesPanel_Type)
+ (Py_TYPE(v) == _curses_panelstate_global->PyCursesPanel_Type)
 
 /* Some helper functions. The problem is that there's always a window
    associated with a panel. To ensure that Python's GC doesn't pull
@@ -239,7 +233,7 @@ PyCursesPanel_New(PANEL *pan, PyCursesWindowObject *wo)
 {
     PyCursesPanelObject *po;
 
-    po = PyObject_New(PyCursesPanelObject,
+    po = PyObject_NEW(PyCursesPanelObject,
                       (PyTypeObject *)(_curses_panelstate_global)->PyCursesPanel_Type);
     if (po == NULL) return NULL;
     po->pan = pan;
@@ -651,15 +645,15 @@ PyInit__curses_panel(void)
     if (v == NULL)
         goto fail;
     ((PyTypeObject *)v)->tp_new = NULL;
-    get_curses_panelstate(m)->PyCursesPanel_Type = v;
+    _curses_panelstate(m)->PyCursesPanel_Type = v;
 
     import_curses();
     if (PyErr_Occurred())
         goto fail;
 
     /* For exception _curses_panel.error */
-    get_curses_panelstate(m)->PyCursesError = PyErr_NewException("_curses_panel.error", NULL, NULL);
-    PyDict_SetItemString(d, "error", get_curses_panelstate(m)->PyCursesError);
+    _curses_panelstate(m)->PyCursesError = PyErr_NewException("_curses_panel.error", NULL, NULL);
+    PyDict_SetItemString(d, "error", _curses_panelstate(m)->PyCursesError);
 
     /* Make the version available */
     v = PyUnicode_FromString(PyCursesVersion);
@@ -667,9 +661,8 @@ PyInit__curses_panel(void)
     PyDict_SetItemString(d, "__version__", v);
     Py_DECREF(v);
 
-    Py_INCREF(get_curses_panelstate(m)->PyCursesPanel_Type);
-    PyModule_AddObject(m, "panel",
-                       (PyObject *)get_curses_panelstate(m)->PyCursesPanel_Type);
+    Py_INCREF(_curses_panelstate(m)->PyCursesPanel_Type);
+    PyModule_AddObject(m, "panel", (PyObject *)_curses_panelstate(m)->PyCursesPanel_Type);
     return m;
   fail:
     Py_XDECREF(m);

@@ -38,41 +38,38 @@ py_uuid_generate_time_safe(PyObject *Py_UNUSED(context),
 #endif
 }
 
-static int
-uuid_exec(PyObject *module) {
-    assert(sizeof(uuid_t) == 16);
-#ifdef HAVE_UUID_GENERATE_TIME_SAFE
-    int has_uuid_generate_time_safe = 1;
-#else
-    int has_uuid_generate_time_safe = 0;
-#endif
-    if (PyModule_AddIntConstant(module, "has_uuid_generate_time_safe",
-                                has_uuid_generate_time_safe) < 0) {
-        return -1;
-    }
-    return 0;
-}
 
 static PyMethodDef uuid_methods[] = {
     {"generate_time_safe", py_uuid_generate_time_safe, METH_NOARGS, NULL},
     {NULL, NULL, 0, NULL}           /* sentinel */
 };
 
-static PyModuleDef_Slot uuid_slots[] = {
-    {Py_mod_exec, uuid_exec},
-    {0, NULL}
-};
-
 static struct PyModuleDef uuidmodule = {
     PyModuleDef_HEAD_INIT,
     .m_name = "_uuid",
-    .m_size = 0,
+    .m_size = -1,
     .m_methods = uuid_methods,
-    .m_slots = uuid_slots,
 };
 
 PyMODINIT_FUNC
 PyInit__uuid(void)
 {
-    return PyModuleDef_Init(&uuidmodule);
+    PyObject *mod;
+    assert(sizeof(uuid_t) == 16);
+#ifdef HAVE_UUID_GENERATE_TIME_SAFE
+    int has_uuid_generate_time_safe = 1;
+#else
+    int has_uuid_generate_time_safe = 0;
+#endif
+    mod = PyModule_Create(&uuidmodule);
+    if (mod == NULL) {
+        return NULL;
+    }
+    if (PyModule_AddIntConstant(mod, "has_uuid_generate_time_safe",
+                                has_uuid_generate_time_safe) < 0) {
+        Py_DECREF(mod);
+        return NULL;
+    }
+
+    return mod;
 }

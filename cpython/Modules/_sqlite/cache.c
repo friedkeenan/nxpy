@@ -112,8 +112,9 @@ void pysqlite_cache_dealloc(pysqlite_Cache* self)
     Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
-PyObject* pysqlite_cache_get(pysqlite_Cache* self, PyObject* key)
+PyObject* pysqlite_cache_get(pysqlite_Cache* self, PyObject* args)
 {
+    PyObject* key = args;
     pysqlite_Node* node;
     pysqlite_Node* ptr;
     PyObject* data;
@@ -183,9 +184,6 @@ PyObject* pysqlite_cache_get(pysqlite_Cache* self, PyObject* key)
             }
         }
 
-        /* We cannot replace this by PyObject_CallOneArg() since
-         * PyObject_CallFunction() has a special case when using a
-         * single tuple as argument. */
         data = PyObject_CallFunction(self->factory, "O", key);
 
         if (!data) {

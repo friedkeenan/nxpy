@@ -99,9 +99,8 @@ active; it will never call dnd_commit().
 
 """
 
-import tkinter
 
-__all__ = ["dnd_start", "DndHandler"]
+import tkinter
 
 
 # The factory function

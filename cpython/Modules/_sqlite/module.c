@@ -105,7 +105,7 @@ RAM instead of on disk.");
 static PyObject* module_complete(PyObject* self, PyObject* args, PyObject*
         kwargs)
 {
-    static char *kwlist[] = {"statement", NULL};
+    static char *kwlist[] = {"statement", NULL, NULL};
     char* statement;
 
     PyObject* result;
@@ -135,7 +135,7 @@ Checks if a string contains a complete SQL statement. Non-standard.");
 static PyObject* module_enable_shared_cache(PyObject* self, PyObject* args, PyObject*
         kwargs)
 {
-    static char *kwlist[] = {"do_enable", NULL};
+    static char *kwlist[] = {"do_enable", NULL, NULL};
     int do_enable;
     int rc;
 
@@ -203,7 +203,7 @@ static PyObject* module_register_converter(PyObject* self, PyObject* args)
     }
 
     /* convert the name to upper case */
-    name = _PyObject_CallMethodIdNoArgs(orig_name, &PyId_upper);
+    name = _PyObject_CallMethodId(orig_name, &PyId_upper, NULL);
     if (!name) {
         goto error;
     }

@@ -293,7 +293,4 @@ def coroutine(func):
     return wrapped
 
 
-GenericAlias = type(list[int])
-
-
 __all__ = [n for n in globals() if n[:1] != '_']

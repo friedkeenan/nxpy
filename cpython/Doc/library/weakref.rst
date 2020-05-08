@@ -171,9 +171,6 @@ Extension types can easily be made to support weak references; see
       performed by the program during iteration may cause items in the
       dictionary to vanish "by magic" (as a side effect of garbage collection).
 
-   .. versionchanged:: 3.9
-      Added support for ``|`` and ``|=`` operators, specified in :pep:`584`.
-
 :class:`WeakKeyDictionary` objects have an additional method that
 exposes the internal references directly.  The references are not guaranteed to
 be "live" at the time they are used, so the result of calling the references
@@ -199,9 +196,6 @@ than needed.
       difficult to ensure for a :class:`WeakValueDictionary` because actions performed
       by the program during iteration may cause items in the dictionary to vanish "by
       magic" (as a side effect of garbage collection).
-
-   .. versionchanged:: 3.9
-      Added support for ``|`` and ``|=`` operators, as specified in :pep:`584`.
 
 :class:`WeakValueDictionary` objects have an additional method that has the
 same issues as the :meth:`keyrefs` method of :class:`WeakKeyDictionary`
@@ -247,7 +241,7 @@ objects.
 
    .. versionadded:: 3.4
 
-.. class:: finalize(obj, func, /, *args, **kwargs)
+.. class:: finalize(obj, func, *args, **kwargs)
 
    Return a callable finalizer object which will be called when *obj*
    is garbage collected. Unlike an ordinary weak reference, a finalizer

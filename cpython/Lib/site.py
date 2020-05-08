@@ -334,22 +334,13 @@ def getsitepackages(prefixes=None):
             continue
         seen.add(prefix)
 
-        libdirs = [sys.platlibdir]
-        if sys.platlibdir != "lib":
-            libdirs.append("lib")
-
         if os.sep == '/':
-            for libdir in libdirs:
-                path = os.path.join(prefix, libdir,
-                                    "python%d.%d" % sys.version_info[:2],
-                                    "site-packages")
-                sitepackages.append(path)
+            sitepackages.append(os.path.join(prefix, "lib",
+                                        "python%d.%d" % sys.version_info[:2],
+                                        "site-packages"))
         else:
             sitepackages.append(prefix)
-
-            for libdir in libdirs:
-                path = os.path.join(prefix, libdir, "site-packages")
-                sitepackages.append(path)
+            sitepackages.append(os.path.join(prefix, "lib", "site-packages"))
     return sitepackages
 
 def addsitepackages(known_paths, prefixes=None):
@@ -599,7 +590,7 @@ def _script():
     Exit codes with --user-base or --user-site:
       0 - user site directory is enabled
       1 - user site directory is disabled by user
-      2 - user site directory is disabled by super user
+      2 - uses site directory is disabled by super user
           or for security reasons
      >2 - unknown error
     """

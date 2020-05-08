@@ -1,6 +1,7 @@
 #include "Python.h"
 #include "pycore_initconfig.h"
 #include "pycore_traceback.h"
+#include "pythread.h"
 #include <signal.h>
 #include <object.h>
 #include <frameobject.h>
@@ -17,6 +18,8 @@
 
 /* Allocate at maximum 100 MiB of the stack to raise the stack overflow */
 #define STACK_OVERFLOW_MAX_SIZE (100 * 1024 * 1024)
+
+#define FAULTHANDLER_LATER
 
 #ifndef MS_WINDOWS
    /* register() is useless on Windows, because only SIGSEGV, SIGABRT and
@@ -57,6 +60,7 @@ static struct {
 #endif
 } fatal_error = {0, NULL, -1, 0};
 
+#ifdef FAULTHANDLER_LATER
 static struct {
     PyObject *file;
     int fd;
@@ -73,6 +77,7 @@ static struct {
     /* released by child thread when joined */
     PyThread_type_lock running;
 } thread;
+#endif
 
 #ifdef FAULTHANDLER_USER
 typedef struct {
@@ -120,13 +125,7 @@ static fault_handler_t faulthandler_handlers[] = {
 static const size_t faulthandler_nsignals = \
     Py_ARRAY_LENGTH(faulthandler_handlers);
 
-/* Using an alternative stack requires sigaltstack()
-   and sigaction() SA_ONSTACK */
-#if defined(HAVE_SIGALTSTACK) && defined(HAVE_SIGACTION)
-#  define FAULTHANDLER_USE_ALT_STACK
-#endif
-
-#ifdef FAULTHANDLER_USE_ALT_STACK
+#ifdef HAVE_SIGALTSTACK
 static stack_t stack;
 static stack_t old_stack;
 #endif
@@ -173,7 +172,7 @@ faulthandler_get_fileno(PyObject **file_ptr)
         return fd;
     }
 
-    result = _PyObject_CallMethodIdNoArgs(file, &PyId_fileno);
+    result = _PyObject_CallMethodId(file, &PyId_fileno, NULL);
     if (result == NULL)
         return -1;
 
@@ -191,7 +190,7 @@ faulthandler_get_fileno(PyObject **file_ptr)
         return -1;
     }
 
-    result = _PyObject_CallMethodIdNoArgs(file, &PyId_flush);
+    result = _PyObject_CallMethodId(file, &PyId_flush, NULL);
     if (result != NULL)
         Py_DECREF(result);
     else {
@@ -428,36 +427,6 @@ faulthandler_exc_handler(struct _EXCEPTION_POINTERS *exc_info)
 }
 #endif
 
-
-#ifdef FAULTHANDLER_USE_ALT_STACK
-static int
-faulthandler_allocate_stack(void)
-{
-    if (stack.ss_sp != NULL) {
-        return 0;
-    }
-    /* Allocate an alternate stack for faulthandler() signal handler
-       to be able to execute a signal handler on a stack overflow error */
-    stack.ss_sp = PyMem_Malloc(stack.ss_size);
-    if (stack.ss_sp == NULL) {
-        PyErr_NoMemory();
-        return -1;
-    }
-
-    int err = sigaltstack(&stack, &old_stack);
-    if (err) {
-        /* Release the stack to retry sigaltstack() next time */
-        PyMem_Free(stack.ss_sp);
-        stack.ss_sp = NULL;
-
-        PyErr_SetFromErrno(PyExc_OSError);
-        return -1;
-    }
-    return 0;
-}
-#endif
-
-
 /* Install the handler for fatal signals, faulthandler_fatal_error(). */
 
 static int
@@ -468,35 +437,32 @@ faulthandler_enable(void)
     }
     fatal_error.enabled = 1;
 
-#ifdef FAULTHANDLER_USE_ALT_STACK
-    if (faulthandler_allocate_stack() < 0) {
-        return -1;
-    }
-#endif
-
     for (size_t i=0; i < faulthandler_nsignals; i++) {
         fault_handler_t *handler;
+#ifdef HAVE_SIGACTION
+        struct sigaction action;
+#endif
         int err;
 
         handler = &faulthandler_handlers[i];
         assert(!handler->enabled);
 #ifdef HAVE_SIGACTION
-        struct sigaction action;
         action.sa_handler = faulthandler_fatal_error;
         sigemptyset(&action.sa_mask);
         /* Do not prevent the signal from being received from within
            its own signal handler */
         action.sa_flags = SA_NODEFER;
-#ifdef FAULTHANDLER_USE_ALT_STACK
-        assert(stack.ss_sp != NULL);
-        /* Call the signal handler on an alternate signal stack
-           provided by sigaltstack() */
-        action.sa_flags |= SA_ONSTACK;
+#ifdef HAVE_SIGALTSTACK
+        if (stack.ss_sp != NULL) {
+            /* Call the signal handler on an alternate signal stack
+               provided by sigaltstack() */
+            action.sa_flags |= SA_ONSTACK;
+        }
 #endif
         err = sigaction(handler->signum, &action, &handler->previous);
 #else
         handler->previous = signal(handler->signum,
-                                   faulthandler_fatal_error);
+                faulthandler_fatal_error);
         err = (handler->previous == SIG_ERR);
 #endif
         if (err) {
@@ -539,7 +505,7 @@ faulthandler_py_enable(PyObject *self, PyObject *args, PyObject *kwargs)
     Py_XSETREF(fatal_error.file, file);
     fatal_error.fd = fd;
     fatal_error.all_threads = all_threads;
-    fatal_error.interp = PyThreadState_GetInterpreter(tstate);
+    fatal_error.interp = tstate->interp;
 
     if (faulthandler_enable() < 0) {
         return NULL;
@@ -584,6 +550,8 @@ faulthandler_is_enabled(PyObject *self, PyObject *Py_UNUSED(ignored))
     return PyBool_FromLong(fatal_error.enabled);
 }
 
+#ifdef FAULTHANDLER_LATER
+
 static void
 faulthandler_thread(void *unused)
 {
@@ -624,11 +592,6 @@ faulthandler_thread(void *unused)
 static void
 cancel_dump_traceback_later(void)
 {
-    /* If not scheduled, nothing to cancel */
-    if (!thread.cancel_event) {
-        return;
-    }
-
     /* Notify cancellation */
     PyThread_release_lock(thread.cancel_event);
 
@@ -713,37 +676,17 @@ faulthandler_dump_traceback_later(PyObject *self,
     }
 
     tstate = get_thread_state();
-    if (tstate == NULL) {
+    if (tstate == NULL)
         return NULL;
-    }
 
     fd = faulthandler_get_fileno(&file);
-    if (fd < 0) {
+    if (fd < 0)
         return NULL;
-    }
-
-    if (!thread.running) {
-        thread.running = PyThread_allocate_lock();
-        if (!thread.running) {
-            return PyErr_NoMemory();
-        }
-    }
-    if (!thread.cancel_event) {
-        thread.cancel_event = PyThread_allocate_lock();
-        if (!thread.cancel_event || !thread.running) {
-            return PyErr_NoMemory();
-        }
-
-        /* cancel_event starts to be acquired: it's only released to cancel
-           the thread. */
-        PyThread_acquire_lock(thread.cancel_event, 1);
-    }
 
     /* format the timeout */
     header = format_timeout(timeout_us);
-    if (header == NULL) {
+    if (header == NULL)
         return PyErr_NoMemory();
-    }
     header_len = strlen(header);
 
     /* Cancel previous thread, if running */
@@ -755,7 +698,7 @@ faulthandler_dump_traceback_later(PyObject *self,
     /* the downcast is safe: we check that 0 < timeout_us < PY_TIMEOUT_MAX */
     thread.timeout_us = (PY_TIMEOUT_T)timeout_us;
     thread.repeat = repeat;
-    thread.interp = PyThreadState_GetInterpreter(tstate);
+    thread.interp = tstate->interp;
     thread.exit = exit;
     thread.header = header;
     thread.header_len = header_len;
@@ -783,11 +726,11 @@ faulthandler_cancel_dump_traceback_later_py(PyObject *self,
     cancel_dump_traceback_later();
     Py_RETURN_NONE;
 }
-
+#endif  /* FAULTHANDLER_LATER */
 
 #ifdef FAULTHANDLER_USER
 static int
-faulthandler_register(int signum, int chain, _Py_sighandler_t *previous_p)
+faulthandler_register(int signum, int chain, _Py_sighandler_t *p_previous)
 {
 #ifdef HAVE_SIGACTION
     struct sigaction action;
@@ -802,19 +745,19 @@ faulthandler_register(int signum, int chain, _Py_sighandler_t *previous_p)
            own signal handler */
         action.sa_flags = SA_NODEFER;
     }
-#ifdef FAULTHANDLER_USE_ALT_STACK
-    assert(stack.ss_sp != NULL);
-    /* Call the signal handler on an alternate signal stack
-       provided by sigaltstack() */
-    action.sa_flags |= SA_ONSTACK;
+#ifdef HAVE_SIGALTSTACK
+    if (stack.ss_sp != NULL) {
+        /* Call the signal handler on an alternate signal stack
+           provided by sigaltstack() */
+        action.sa_flags |= SA_ONSTACK;
+    }
 #endif
-    return sigaction(signum, &action, previous_p);
+    return sigaction(signum, &action, p_previous);
 #else
     _Py_sighandler_t previous;
     previous = signal(signum, faulthandler_user);
-    if (previous_p != NULL) {
-        *previous_p = previous;
-    }
+    if (p_previous != NULL)
+        *p_previous = previous;
     return (previous == SIG_ERR);
 #endif
 }
@@ -910,19 +853,14 @@ faulthandler_register_py(PyObject *self,
         return NULL;
 
     if (user_signals == NULL) {
-        user_signals = PyMem_Calloc(NSIG, sizeof(user_signal_t));
+        user_signals = PyMem_Malloc(NSIG * sizeof(user_signal_t));
         if (user_signals == NULL)
             return PyErr_NoMemory();
+        memset(user_signals, 0, NSIG * sizeof(user_signal_t));
     }
     user = &user_signals[signum];
 
     if (!user->enabled) {
-#ifdef FAULTHANDLER_USE_ALT_STACK
-        if (faulthandler_allocate_stack() < 0) {
-            return NULL;
-        }
-#endif
-
         err = faulthandler_register(signum, chain, &previous);
         if (err) {
             PyErr_SetFromErrno(PyExc_OSError);
@@ -937,7 +875,7 @@ faulthandler_register_py(PyObject *self,
     user->fd = fd;
     user->all_threads = all_threads;
     user->chain = chain;
-    user->interp = PyThreadState_GetInterpreter(tstate);
+    user->interp = tstate->interp;
     user->enabled = 1;
 
     Py_RETURN_NONE;
@@ -1063,10 +1001,24 @@ faulthandler_sigsegv(PyObject *self, PyObject *args)
     Py_RETURN_NONE;
 }
 
-static void _Py_NO_RETURN
+static void
 faulthandler_fatal_error_thread(void *plock)
 {
+#ifndef __clang__
+    PyThread_type_lock *lock = (PyThread_type_lock *)plock;
+#endif
+
     Py_FatalError("in new thread");
+
+#ifndef __clang__
+    /* Issue #28152: Py_FatalError() is declared with
+       __attribute__((__noreturn__)).  GCC emits a warning without
+       "PyThread_release_lock()" (compiler bug?), but Clang is smarter and
+       emits a warning on the return. */
+
+    /* notify the caller that we are done */
+    PyThread_release_lock(lock);
+#endif
 }
 
 static PyObject *
@@ -1142,7 +1094,7 @@ faulthandler_fatal_error_py(PyObject *self, PyObject *args)
     Py_RETURN_NONE;
 }
 
-#if defined(FAULTHANDLER_USE_ALT_STACK)
+#if defined(HAVE_SIGALTSTACK) && defined(HAVE_SIGACTION)
 #define FAULTHANDLER_STACK_OVERFLOW
 
 static uintptr_t
@@ -1197,13 +1149,15 @@ faulthandler_stack_overflow(PyObject *self, PyObject *Py_UNUSED(ignored))
         size, depth);
     return NULL;
 }
-#endif   /* defined(FAULTHANDLER_USE_ALT_STACK) && defined(HAVE_SIGACTION) */
+#endif   /* defined(HAVE_SIGALTSTACK) && defined(HAVE_SIGACTION) */
 
 
 static int
 faulthandler_traverse(PyObject *module, visitproc visit, void *arg)
 {
+#ifdef FAULTHANDLER_LATER
     Py_VISIT(thread.file);
+#endif
 #ifdef FAULTHANDLER_USER
     if (user_signals != NULL) {
         for (size_t signum=0; signum < NSIG; signum++)
@@ -1244,6 +1198,7 @@ static PyMethodDef module_methods[] = {
      PyDoc_STR("dump_traceback(file=sys.stderr, all_threads=True): "
                "dump the traceback of the current thread, or of all threads "
                "if all_threads is True, into file")},
+#ifdef FAULTHANDLER_LATER
     {"dump_traceback_later",
      (PyCFunction)(void(*)(void))faulthandler_dump_traceback_later, METH_VARARGS|METH_KEYWORDS,
      PyDoc_STR("dump_traceback_later(timeout, repeat=False, file=sys.stderrn, exit=False):\n"
@@ -1254,6 +1209,8 @@ static PyMethodDef module_methods[] = {
      faulthandler_cancel_dump_traceback_later_py, METH_NOARGS,
      PyDoc_STR("cancel_dump_traceback_later():\ncancel the previous call "
                "to dump_traceback_later().")},
+#endif
+
 #ifdef FAULTHANDLER_USER
     {"register",
      (PyCFunction)(void(*)(void))faulthandler_register_py, METH_VARARGS|METH_KEYWORDS,
@@ -1266,6 +1223,7 @@ static PyMethodDef module_methods[] = {
      PyDoc_STR("unregister(signum): unregister the handler of the signal "
                 "'signum' registered by register()")},
 #endif
+
     {"_read_null", faulthandler_read_null, METH_NOARGS,
      PyDoc_STR("_read_null(): read from NULL, raise "
                "a SIGSEGV or SIGBUS signal depending on the platform")},
@@ -1354,7 +1312,7 @@ faulthandler_init_enable(void)
         return -1;
     }
 
-    PyObject *res = _PyObject_CallMethodIdNoArgs(module, &PyId_enable);
+    PyObject *res = _PyObject_CallMethodId(module, &PyId_enable, NULL);
     Py_DECREF(module);
     if (res == NULL) {
         return -1;
@@ -1367,17 +1325,36 @@ faulthandler_init_enable(void)
 PyStatus
 _PyFaulthandler_Init(int enable)
 {
-#ifdef FAULTHANDLER_USE_ALT_STACK
-    memset(&stack, 0, sizeof(stack));
+#ifdef HAVE_SIGALTSTACK
+    int err;
+
+    /* Try to allocate an alternate stack for faulthandler() signal handler to
+     * be able to allocate memory on the stack, even on a stack overflow. If it
+     * fails, ignore the error. */
     stack.ss_flags = 0;
     /* bpo-21131: allocate dedicated stack of SIGSTKSZ*2 bytes, instead of just
        SIGSTKSZ bytes. Calling the previous signal handler in faulthandler
        signal handler uses more than SIGSTKSZ bytes of stack memory on some
        platforms. */
     stack.ss_size = SIGSTKSZ * 2;
+    stack.ss_sp = PyMem_Malloc(stack.ss_size);
+    if (stack.ss_sp != NULL) {
+        err = sigaltstack(&stack, &old_stack);
+        if (err) {
+            PyMem_Free(stack.ss_sp);
+            stack.ss_sp = NULL;
+        }
+    }
 #endif
-
-    memset(&thread, 0, sizeof(thread));
+#ifdef FAULTHANDLER_LATER
+    thread.file = NULL;
+    thread.cancel_event = PyThread_allocate_lock();
+    thread.running = PyThread_allocate_lock();
+    if (!thread.cancel_event || !thread.running) {
+        return _PyStatus_ERR("failed to allocate locks for faulthandler");
+    }
+    PyThread_acquire_lock(thread.cancel_event, 1);
+#endif
 
     if (enable) {
         if (faulthandler_init_enable() < 0) {
@@ -1389,6 +1366,7 @@ _PyFaulthandler_Init(int enable)
 
 void _PyFaulthandler_Fini(void)
 {
+#ifdef FAULTHANDLER_LATER
     /* later */
     if (thread.cancel_event) {
         cancel_dump_traceback_later();
@@ -1400,6 +1378,7 @@ void _PyFaulthandler_Fini(void)
         PyThread_free_lock(thread.running);
         thread.running = NULL;
     }
+#endif
 
 #ifdef FAULTHANDLER_USER
     /* user */
@@ -1414,8 +1393,7 @@ void _PyFaulthandler_Fini(void)
 
     /* fatal */
     faulthandler_disable();
-
-#ifdef FAULTHANDLER_USE_ALT_STACK
+#ifdef HAVE_SIGALTSTACK
     if (stack.ss_sp != NULL) {
         /* Fetch the current alt stack */
         stack_t current_stack;

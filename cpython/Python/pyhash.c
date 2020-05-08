@@ -129,7 +129,7 @@ _Py_HashDouble(double v)
 }
 
 Py_hash_t
-_Py_HashPointer(const void *p)
+_Py_HashPointer(void *p)
 {
     Py_hash_t x;
     size_t y = (size_t)p;
@@ -412,6 +412,13 @@ siphash24(uint64_t k0, uint64_t k1, const void *src, Py_ssize_t src_sz) {
     return t;
 }
 
+static Py_hash_t
+pysiphash(const void *src, Py_ssize_t src_sz) {
+    return (Py_hash_t)siphash24(
+        _le64toh(_Py_HashSecret.siphash.k0), _le64toh(_Py_HashSecret.siphash.k1),
+        src, src_sz);
+}
+
 uint64_t
 _Py_KeyedHash(uint64_t key, const void *src, Py_ssize_t src_sz)
 {
@@ -420,13 +427,6 @@ _Py_KeyedHash(uint64_t key, const void *src, Py_ssize_t src_sz)
 
 
 #if Py_HASH_ALGORITHM == Py_HASH_SIPHASH24
-static Py_hash_t
-pysiphash(const void *src, Py_ssize_t src_sz) {
-    return (Py_hash_t)siphash24(
-        _le64toh(_Py_HashSecret.siphash.k0), _le64toh(_Py_HashSecret.siphash.k1),
-        src, src_sz);
-}
-
 static PyHash_FuncDef PyHash_Func = {pysiphash, "siphash24", 64, 128};
 #endif
 

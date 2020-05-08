@@ -466,7 +466,7 @@ class TypesTests(unittest.TestCase):
 
         # No format code means use g, but must have a decimal
         # and a number after the decimal.  This is tricky, because
-        # a totally empty format specifier means something else.
+        # a totaly empty format specifier means something else.
         # So, just use a sign flag
         test(1e200, '+g', '+1e+200')
         test(1e200, '+', '+1e+200')
@@ -622,13 +622,8 @@ class MappingProxyTests(unittest.TestCase):
         self.assertEqual(attrs, {
              '__contains__',
              '__getitem__',
-             '__class_getitem__',
-             '__ior__',
              '__iter__',
              '__len__',
-             '__or__',
-             '__reversed__',
-             '__ror__',
              'copy',
              'get',
              'items',
@@ -769,14 +764,6 @@ class MappingProxyTests(unittest.TestCase):
         self.assertEqual(set(view.values()), set(values))
         self.assertEqual(set(view.items()), set(items))
 
-    def test_reversed(self):
-        d = {'a': 1, 'b': 2, 'foo': 0, 'c': 3, 'd': 4}
-        mp = self.mappingproxy(d)
-        del d['foo']
-        r = reversed(mp)
-        self.assertEqual(list(r), list('dcba'))
-        self.assertRaises(StopIteration, next, r)
-
     def test_copy(self):
         original = {'key1': 27, 'key2': 51, 'key3': 93}
         view = self.mappingproxy(original)
@@ -786,22 +773,6 @@ class MappingProxyTests(unittest.TestCase):
         original['key1'] = 70
         self.assertEqual(view['key1'], 70)
         self.assertEqual(copy['key1'], 27)
-
-    def test_union(self):
-        mapping = {'a': 0, 'b': 1, 'c': 2}
-        view = self.mappingproxy(mapping)
-        with self.assertRaises(TypeError):
-            view | [('r', 2), ('d', 2)]
-        with self.assertRaises(TypeError):
-            [('r', 2), ('d', 2)] | view
-        with self.assertRaises(TypeError):
-            view |= [('r', 2), ('d', 2)]
-        other = {'c': 3, 'p': 0}
-        self.assertDictEqual(view | other, {'a': 0, 'b': 1, 'c': 3, 'p': 0})
-        self.assertDictEqual(other | view, {'c': 2, 'p': 0, 'a': 0, 'b': 1})
-        self.assertEqual(view, {'a': 0, 'b': 1, 'c': 2})
-        self.assertDictEqual(mapping, {'a': 0, 'b': 1, 'c': 2})
-        self.assertDictEqual(other, {'c': 3, 'p': 0})
 
 
 class ClassCreationTests(unittest.TestCase):

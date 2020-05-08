@@ -8,7 +8,7 @@
    Check itemsize */
 
 #include "Python.h"
-#include "structmember.h"         // PyMemberDef
+#include "structmember.h"
 
 #define WINDOWS_LEAN_AND_MEAN
 #include <winsock2.h>
@@ -1860,10 +1860,12 @@ PyInit__overlapped(void)
     if (initialize_function_pointers() < 0)
         return NULL;
 
-    m = PyModule_Create(&overlapped_module);
-    if (PyModule_AddType(m, &OverlappedType) < 0) {
+    if (PyType_Ready(&OverlappedType) < 0)
         return NULL;
-    }
+
+    m = PyModule_Create(&overlapped_module);
+    if (PyModule_AddObject(m, "Overlapped", (PyObject *)&OverlappedType) < 0)
+        return NULL;
 
     d = PyModule_GetDict(m);
 

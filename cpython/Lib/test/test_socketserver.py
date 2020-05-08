@@ -15,13 +15,12 @@ import socketserver
 
 import test.support
 from test.support import reap_children, reap_threads, verbose
-from test.support import socket_helper
 
 
 test.support.requires("network")
 
 TEST_STR = b"hello world\n"
-HOST = socket_helper.HOST
+HOST = test.support.HOST
 
 HAVE_UNIX_SOCKETS = hasattr(socket, "AF_UNIX")
 requires_unix_sockets = unittest.skipUnless(HAVE_UNIX_SOCKETS,
@@ -37,7 +36,7 @@ def signal_alarm(n):
 # Remember real select() to avoid interferences with mocking
 _real_select = select.select
 
-def receive(sock, n, timeout=test.support.SHORT_TIMEOUT):
+def receive(sock, n, timeout=20):
     r, w, x = _real_select([sock], [], [], timeout)
     if sock in r:
         return sock.recv(n)
@@ -66,7 +65,9 @@ def simple_subprocess(testcase):
     except:
         raise
     finally:
-        test.support.wait_process(pid, exitcode=72)
+        pid2, status = os.waitpid(pid, 0)
+        testcase.assertEqual(pid2, pid)
+        testcase.assertEqual(72 << 8, status)
 
 
 class SocketServerTest(unittest.TestCase):

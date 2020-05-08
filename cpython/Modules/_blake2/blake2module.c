@@ -62,10 +62,13 @@ PyInit__blake2(void)
         return NULL;
 
     /* BLAKE2b */
-    Py_SET_TYPE(&PyBlake2_BLAKE2bType, &PyType_Type);
-    if (PyModule_AddType(m, &PyBlake2_BLAKE2bType) < 0) {
+    Py_TYPE(&PyBlake2_BLAKE2bType) = &PyType_Type;
+    if (PyType_Ready(&PyBlake2_BLAKE2bType) < 0) {
         return NULL;
     }
+
+    Py_INCREF(&PyBlake2_BLAKE2bType);
+    PyModule_AddObject(m, "blake2b", (PyObject *)&PyBlake2_BLAKE2bType);
 
     d = PyBlake2_BLAKE2bType.tp_dict;
     ADD_INT(d, "SALT_SIZE", BLAKE2B_SALTBYTES);
@@ -79,10 +82,13 @@ PyInit__blake2(void)
     PyModule_AddIntConstant(m, "BLAKE2B_MAX_DIGEST_SIZE", BLAKE2B_OUTBYTES);
 
     /* BLAKE2s */
-    Py_SET_TYPE(&PyBlake2_BLAKE2sType, &PyType_Type);
-    if (PyModule_AddType(m, &PyBlake2_BLAKE2sType) < 0) {
+    Py_TYPE(&PyBlake2_BLAKE2sType) = &PyType_Type;
+    if (PyType_Ready(&PyBlake2_BLAKE2sType) < 0) {
         return NULL;
     }
+
+    Py_INCREF(&PyBlake2_BLAKE2sType);
+    PyModule_AddObject(m, "blake2s", (PyObject *)&PyBlake2_BLAKE2sType);
 
     d = PyBlake2_BLAKE2sType.tp_dict;
     ADD_INT(d, "SALT_SIZE", BLAKE2S_SALTBYTES);

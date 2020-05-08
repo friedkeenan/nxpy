@@ -244,7 +244,7 @@ operation is being performed, so the intermediate analysis object isn't useful:
 
 .. function:: findlabels(code)
 
-   Detect all offsets in the raw compiled bytecode string *code* which are jump targets, and
+   Detect all offsets in the code object *code* which are jump targets, and
    return a list of these offsets.
 
 
@@ -706,29 +706,50 @@ iterations of the loop.
    popped values are used to restore the exception state.
 
 
-.. opcode:: RERAISE
+.. opcode:: POP_FINALLY (preserve_tos)
 
-    Re-raises the exception currently on top of the stack.
+   Cleans up the value stack and the block stack.  If *preserve_tos* is not
+   ``0`` TOS first is popped from the stack and pushed on the stack after
+   performing other stack operations:
 
-    .. versionadded:: 3.9
+   * If TOS is ``NULL`` or an integer (pushed by :opcode:`BEGIN_FINALLY`
+     or :opcode:`CALL_FINALLY`) it is popped from the stack.
+   * If TOS is an exception type (pushed when an exception has been raised)
+     6 values are popped from the stack, the last three popped values are
+     used to restore the exception state.  An exception handler block is
+     removed from the block stack.
+
+   It is similar to :opcode:`END_FINALLY`, but doesn't change the bytecode
+   counter nor raise an exception.  Used for implementing :keyword:`break`,
+   :keyword:`continue` and :keyword:`return` in the :keyword:`finally` block.
+
+   .. versionadded:: 3.8
 
 
-.. opcode:: WITH_EXCEPT_START
+.. opcode:: BEGIN_FINALLY
 
-    Calls the function in position 7 on the stack with the top three
-    items on the stack as arguments.
-    Used to implement the call ``context_manager.__exit__(*exc_info())`` when an exception
-    has occurred in a :keyword:`with` statement.
+   Pushes ``NULL`` onto the stack for using it in :opcode:`END_FINALLY`,
+   :opcode:`POP_FINALLY`, :opcode:`WITH_CLEANUP_START` and
+   :opcode:`WITH_CLEANUP_FINISH`.  Starts the :keyword:`finally` block.
 
-    .. versionadded:: 3.9
+   .. versionadded:: 3.8
 
 
-.. opcode:: LOAD_ASSERTION_ERROR
+.. opcode:: END_FINALLY
 
-   Pushes :exc:`AssertionError` onto the stack.  Used by the :keyword:`assert`
-   statement.
+   Terminates a :keyword:`finally` clause.  The interpreter recalls whether the
+   exception has to be re-raised or execution has to be continued depending on
+   the value of TOS.
 
-   .. versionadded:: 3.9
+   * If TOS is ``NULL`` (pushed by :opcode:`BEGIN_FINALLY`) continue from
+     the next instruction. TOS is popped.
+   * If TOS is an integer (pushed by :opcode:`CALL_FINALLY`), sets the
+     bytecode counter to TOS.  TOS is popped.
+   * If TOS is an exception type (pushed when an exception has been raised)
+     6 values are popped from the stack, the first three popped values are
+     used to re-raise the exception and the last three popped values are used
+     to restore the exception state.  An exception handler block is removed
+     from the block stack.
 
 
 .. opcode:: LOAD_BUILD_CLASS
@@ -749,6 +770,35 @@ iterations of the loop.
    :opcode:`UNPACK_SEQUENCE`).
 
    .. versionadded:: 3.2
+
+
+.. opcode:: WITH_CLEANUP_START
+
+   Starts cleaning up the stack when a :keyword:`with` statement block exits.
+
+   At the top of the stack are either ``NULL`` (pushed by
+   :opcode:`BEGIN_FINALLY`) or 6 values pushed if an exception has been
+   raised in the with block.  Below is the context manager's
+   :meth:`~object.__exit__` or :meth:`~object.__aexit__` bound method.
+
+   If TOS is ``NULL``, calls ``SECOND(None, None, None)``,
+   removes the function from the stack, leaving TOS, and pushes ``None``
+   to the stack.  Otherwise calls ``SEVENTH(TOP, SECOND, THIRD)``,
+   shifts the bottom 3 values of the stack down, replaces the empty spot
+   with ``NULL`` and pushes TOS.  Finally pushes the result of the call.
+
+
+.. opcode:: WITH_CLEANUP_FINISH
+
+   Finishes cleaning up the stack when a :keyword:`with` statement block exits.
+
+   TOS is result of ``__exit__()`` or ``__aexit__()`` function call pushed
+   by :opcode:`WITH_CLEANUP_START`.  SECOND is ``None`` or an exception type
+   (pushed when an exception has been raised).
+
+   Pops two values from the stack.  If SECOND is not None and TOS is true
+   unwinds the EXCEPT_HANDLER block which was created when the exception
+   was caught and pushes ``NULL`` to the stack.
 
 
 All of the following opcodes use their arguments.
@@ -844,9 +894,9 @@ All of the following opcodes use their arguments.
 
 .. opcode:: BUILD_CONST_KEY_MAP (count)
 
-   The version of :opcode:`BUILD_MAP` specialized for constant keys. Pops the
-   top element on the stack which contains a tuple of keys, then starting from
-   ``TOS1``, pops *count* values to form values in the built dictionary.
+   The version of :opcode:`BUILD_MAP` specialized for constant keys.  *count*
+   values are consumed from the stack.  The top element on the stack contains
+   a tuple of keys.
 
    .. versionadded:: 3.6
 
@@ -859,39 +909,61 @@ All of the following opcodes use their arguments.
    .. versionadded:: 3.6
 
 
-.. opcode:: LIST_TO_TUPLE
+.. opcode:: BUILD_TUPLE_UNPACK (count)
 
-    Pops a list from the stack and pushes a tuple containing the same values.
+   Pops *count* iterables from the stack, joins them in a single tuple,
+   and pushes the result.  Implements iterable unpacking in tuple
+   displays ``(*x, *y, *z)``.
 
-   .. versionadded:: 3.9
-
-
-.. opcode:: LIST_EXTEND (i)
-
-   Calls ``list.extend(TOS1[-i], TOS)``.  Used to build lists.
-
-   .. versionadded:: 3.9
+   .. versionadded:: 3.5
 
 
-.. opcode:: SET_UPDATE (i)
+.. opcode:: BUILD_TUPLE_UNPACK_WITH_CALL (count)
 
-   Calls ``set.update(TOS1[-i], TOS)``.  Used to build sets.
+   This is similar to :opcode:`BUILD_TUPLE_UNPACK`,
+   but is used for ``f(*x, *y, *z)`` call syntax. The stack item at position
+   ``count + 1`` should be the corresponding callable ``f``.
 
-   .. versionadded:: 3.9
-
-
-.. opcode:: DICT_UPDATE (i)
-
-   Calls ``dict.update(TOS1[-i], TOS)``.  Used to build dicts.
-
-   .. versionadded:: 3.9
+   .. versionadded:: 3.6
 
 
-.. opcode:: DICT_MERGE
+.. opcode:: BUILD_LIST_UNPACK (count)
 
-    Like :opcode:`DICT_UPDATE` but raises an exception for duplicate keys.
+   This is similar to :opcode:`BUILD_TUPLE_UNPACK`, but pushes a list
+   instead of tuple.  Implements iterable unpacking in list
+   displays ``[*x, *y, *z]``.
 
-   .. versionadded:: 3.9
+   .. versionadded:: 3.5
+
+
+.. opcode:: BUILD_SET_UNPACK (count)
+
+   This is similar to :opcode:`BUILD_TUPLE_UNPACK`, but pushes a set
+   instead of tuple.  Implements iterable unpacking in set
+   displays ``{*x, *y, *z}``.
+
+   .. versionadded:: 3.5
+
+
+.. opcode:: BUILD_MAP_UNPACK (count)
+
+   Pops *count* mappings from the stack, merges them into a single dictionary,
+   and pushes the result.  Implements dictionary unpacking in dictionary
+   displays ``{**x, **y, **z}``.
+
+   .. versionadded:: 3.5
+
+
+.. opcode:: BUILD_MAP_UNPACK_WITH_CALL (count)
+
+   This is similar to :opcode:`BUILD_MAP_UNPACK`,
+   but is used for ``f(**x, **y, **z)`` call syntax.  The stack item at
+   position ``count + 2`` should be the corresponding callable ``f``.
+
+   .. versionadded:: 3.5
+   .. versionchanged:: 3.6
+      The position of the callable is determined by adding 2 to the opcode
+      argument instead of encoding it in the second byte of the argument.
 
 
 .. opcode:: LOAD_ATTR (namei)
@@ -903,20 +975,6 @@ All of the following opcodes use their arguments.
 
    Performs a Boolean operation.  The operation name can be found in
    ``cmp_op[opname]``.
-
-
-.. opcode:: IS_OP (invert)
-
-    Performs ``is`` comparison, or ``is not`` if ``invert`` is 1.
-
-   .. versionadded:: 3.9
-
-
-.. opcode:: CONTAINS_OP (invert)
-
-    Performs ``in`` comparison, or ``not in`` if ``invert`` is 1.
-
-   .. versionadded:: 3.9
 
 
 .. opcode:: IMPORT_NAME (namei)
@@ -953,13 +1011,6 @@ All of the following opcodes use their arguments.
 
    .. versionadded:: 3.1
 
-.. opcode:: JUMP_IF_NOT_EXC_MATCH (target)
-
-    Tests whether the second value on the stack is an exception matching TOS,
-    and jumps if it is not. Pops two values from the stack.
-
-   .. versionadded:: 3.9
-
 
 .. opcode:: JUMP_IF_TRUE_OR_POP (target)
 
@@ -986,7 +1037,7 @@ All of the following opcodes use their arguments.
 
    TOS is an :term:`iterator`.  Call its :meth:`~iterator.__next__` method.  If
    this yields a new value, push it on the stack (leaving the iterator below
-   it).  If the iterator indicates it is exhausted, TOS is popped, and the byte
+   it).  If the iterator indicates it is exhausted TOS is popped, and the byte
    code counter is incremented by *delta*.
 
 
@@ -999,6 +1050,15 @@ All of the following opcodes use their arguments.
 
    Pushes a try block from a try-finally or try-except clause onto the block
    stack.  *delta* points to the finally block or the first except block.
+
+
+.. opcode:: CALL_FINALLY (delta)
+
+   Pushes the address of the next instruction onto the stack and increments
+   bytecode counter by *delta*.  Used for calling the finally block as a
+   "subroutine".
+
+   .. versionadded:: 3.8
 
 
 .. opcode:: LOAD_FAST (var_num)
@@ -1082,10 +1142,8 @@ All of the following opcodes use their arguments.
 
    Calls a callable object with positional (if any) and keyword arguments.
    *argc* indicates the total number of positional and keyword arguments.
-   The top element on the stack contains a tuple with the names of the
-   keyword arguments, which must be strings.
-   Below that are the values for the keyword arguments,
-   in the order corresponding to the tuple.
+   The top element on the stack contains a tuple of keyword argument names.
+   Below that are keyword arguments in the order corresponding to the tuple.
    Below that are positional arguments, with the right-most parameter on
    top.  Below the arguments is a callable object to call.
    ``CALL_FUNCTION_KW`` pops all arguments and the callable object off the stack,
@@ -1102,6 +1160,10 @@ All of the following opcodes use their arguments.
    Calls a callable object with variable set of positional and keyword
    arguments.  If the lowest bit of *flags* is set, the top of the stack
    contains a mapping object containing additional keyword arguments.
+   Below that is an iterable object containing positional arguments and
+   a callable object to call.  :opcode:`BUILD_MAP_UNPACK_WITH_CALL` and
+   :opcode:`BUILD_TUPLE_UNPACK_WITH_CALL` can be used for merging multiple
+   mapping objects and iterables containing arguments.
    Before the callable is called, the mapping object and iterable object
    are each "unpacked" and their contents passed in as keyword and
    positional arguments respectively.
@@ -1136,7 +1198,7 @@ All of the following opcodes use their arguments.
    .. versionadded:: 3.7
 
 
-.. opcode:: MAKE_FUNCTION (flags)
+.. opcode:: MAKE_FUNCTION (argc)
 
    Pushes a new function object on the stack.  From bottom to top, the consumed
    stack must consist of values if the argument carries a specified flag value

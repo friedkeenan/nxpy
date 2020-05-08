@@ -62,12 +62,6 @@ class TestModule(unittest.TestCase):
         self.assertEqual(datetime.MINYEAR, 1)
         self.assertEqual(datetime.MAXYEAR, 9999)
 
-    def test_all(self):
-        """Test that __all__ only points to valid attributes."""
-        all_attrs = dir(datetime_module)
-        for attr in datetime_module.__all__:
-            self.assertIn(attr, all_attrs)
-
     def test_name_cleanup(self):
         if '_Pure' in self.__class__.__name__:
             self.skipTest('Only run for Fast C implementation')
@@ -5791,8 +5785,6 @@ class ZoneInfoTest(unittest.TestCase):
     zonename = 'America/New_York'
 
     def setUp(self):
-        if sys.platform == "vxworks":
-            self.skipTest("Skipping zoneinfo tests on VxWorks")
         if sys.platform == "win32":
             self.skipTest("Skipping zoneinfo tests on Windows")
         try:
@@ -5954,65 +5946,6 @@ class CapiTest(unittest.TestCase):
 
                 self.assertEqual(dt1.astimezone(timezone.utc), dt_utc)
 
-    def test_PyDateTime_DELTA_GET(self):
-        class TimeDeltaSubclass(timedelta):
-            pass
-
-        for klass in [timedelta, TimeDeltaSubclass]:
-            for args in [(26, 55, 99999), (26, 55, 99999)]:
-                d = klass(*args)
-                with self.subTest(cls=klass, date=args):
-                    days, seconds, microseconds = _testcapi.PyDateTime_DELTA_GET(d)
-
-                    self.assertEqual(days, d.days)
-                    self.assertEqual(seconds, d.seconds)
-                    self.assertEqual(microseconds, d.microseconds)
-
-    def test_PyDateTime_GET(self):
-        class DateSubclass(date):
-            pass
-
-        for klass in [date, DateSubclass]:
-            for args in [(2000, 1, 2), (2012, 2, 29)]:
-                d = klass(*args)
-                with self.subTest(cls=klass, date=args):
-                    year, month, day = _testcapi.PyDateTime_GET(d)
-
-                    self.assertEqual(year, d.year)
-                    self.assertEqual(month, d.month)
-                    self.assertEqual(day, d.day)
-
-    def test_PyDateTime_DATE_GET(self):
-        class DateTimeSubclass(datetime):
-            pass
-
-        for klass in [datetime, DateTimeSubclass]:
-            for args in [(1993, 8, 26, 22, 12, 55, 99999),
-                         (1993, 8, 26, 22, 12, 55, 99999)]:
-                d = klass(*args)
-                with self.subTest(cls=klass, date=args):
-                    hour, minute, second, microsecond = _testcapi.PyDateTime_DATE_GET(d)
-
-                    self.assertEqual(hour, d.hour)
-                    self.assertEqual(minute, d.minute)
-                    self.assertEqual(second, d.second)
-                    self.assertEqual(microsecond, d.microsecond)
-
-    def test_PyDateTime_TIME_GET(self):
-        class TimeSubclass(time):
-            pass
-
-        for klass in [time, TimeSubclass]:
-            for args in [(12, 30, 20, 10), (12, 30, 20, 10)]:
-                d = klass(*args)
-                with self.subTest(cls=klass, date=args):
-                    hour, minute, second, microsecond = _testcapi.PyDateTime_TIME_GET(d)
-
-                    self.assertEqual(hour, d.hour)
-                    self.assertEqual(minute, d.minute)
-                    self.assertEqual(second, d.second)
-                    self.assertEqual(microsecond, d.microsecond)
-
     def test_timezones_offset_zero(self):
         utc0, utc1, non_utc = _testcapi.get_timezones_offset_zero()
 
@@ -6173,7 +6106,7 @@ class CapiTest(unittest.TestCase):
     def test_date_from_date(self):
         exp_date = date(1993, 8, 26)
 
-        for macro in False, True:
+        for macro in [0, 1]:
             with self.subTest(macro=macro):
                 c_api_date = _testcapi.get_date_fromdate(
                     macro,
@@ -6186,7 +6119,7 @@ class CapiTest(unittest.TestCase):
     def test_datetime_from_dateandtime(self):
         exp_date = datetime(1993, 8, 26, 22, 12, 55, 99999)
 
-        for macro in False, True:
+        for macro in [0, 1]:
             with self.subTest(macro=macro):
                 c_api_date = _testcapi.get_datetime_fromdateandtime(
                     macro,
@@ -6204,7 +6137,7 @@ class CapiTest(unittest.TestCase):
         exp_date = datetime(1993, 8, 26, 22, 12, 55, 99999)
 
         for fold in [0, 1]:
-            for macro in False, True:
+            for macro in [0, 1]:
                 with self.subTest(macro=macro, fold=fold):
                     c_api_date = _testcapi.get_datetime_fromdateandtimeandfold(
                         macro,
@@ -6223,7 +6156,7 @@ class CapiTest(unittest.TestCase):
     def test_time_from_time(self):
         exp_time = time(22, 12, 55, 99999)
 
-        for macro in False, True:
+        for macro in [0, 1]:
             with self.subTest(macro=macro):
                 c_api_time = _testcapi.get_time_fromtime(
                     macro,
@@ -6238,7 +6171,7 @@ class CapiTest(unittest.TestCase):
         exp_time = time(22, 12, 55, 99999)
 
         for fold in [0, 1]:
-            for macro in False, True:
+            for macro in [0, 1]:
                 with self.subTest(macro=macro, fold=fold):
                     c_api_time = _testcapi.get_time_fromtimeandfold(
                         macro,
@@ -6254,7 +6187,7 @@ class CapiTest(unittest.TestCase):
     def test_delta_from_dsu(self):
         exp_delta = timedelta(26, 55, 99999)
 
-        for macro in False, True:
+        for macro in [0, 1]:
             with self.subTest(macro=macro):
                 c_api_delta = _testcapi.get_delta_fromdsu(
                     macro,
@@ -6267,7 +6200,7 @@ class CapiTest(unittest.TestCase):
     def test_date_from_timestamp(self):
         ts = datetime(1995, 4, 12).timestamp()
 
-        for macro in False, True:
+        for macro in [0, 1]:
             with self.subTest(macro=macro):
                 d = _testcapi.get_date_fromtimestamp(int(ts), macro)
 
@@ -6285,7 +6218,7 @@ class CapiTest(unittest.TestCase):
 
         from_timestamp = _testcapi.get_datetime_fromtimestamp
         for case in cases:
-            for macro in False, True:
+            for macro in [0, 1]:
                 with self.subTest(case=case, macro=macro):
                     dtup, tzinfo, usetz = case
                     dt_orig = datetime(*dtup, tzinfo=tzinfo)

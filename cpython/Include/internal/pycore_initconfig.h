@@ -8,8 +8,7 @@ extern "C" {
 #  error "this header requires Py_BUILD_CORE define"
 #endif
 
-/* Forward declaration */
-struct pyruntimestate;
+#include "pycore_pystate.h"   /* _PyRuntimeState */
 
 /* --- PyStatus ----------------------------------------------- */
 
@@ -61,7 +60,7 @@ PyAPI_FUNC(PyObject*) _PyWideStringList_AsList(const PyWideStringList *list);
 
 /* --- _PyArgv ---------------------------------------------------- */
 
-typedef struct _PyArgv {
+typedef struct {
     Py_ssize_t argc;
     int use_bytes_argv;
     char * const *bytes_argv;
@@ -151,7 +150,7 @@ extern PyStatus _PyConfig_Copy(
     const PyConfig *config2);
 extern PyStatus _PyConfig_InitPathConfig(PyConfig *config);
 extern void _PyConfig_Write(const PyConfig *config,
-    struct pyruntimestate *runtime);
+    _PyRuntimeState *runtime);
 extern PyStatus _PyConfig_SetPyArgv(
     PyConfig *config,
     const _PyArgv *args);

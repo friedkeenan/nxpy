@@ -2,7 +2,6 @@ import math
 import os.path
 import sys
 import textwrap
-from test import support
 
 
 def format_duration(seconds):
@@ -62,20 +61,4 @@ def printlist(x, width=70, indent=4, file=None):
 
 
 def print_warning(msg):
-    support.print_warning(msg)
-
-
-orig_unraisablehook = None
-
-
-def regrtest_unraisable_hook(unraisable):
-    global orig_unraisablehook
-    support.environment_altered = True
-    print_warning("Unraisable exception")
-    orig_unraisablehook(unraisable)
-
-
-def setup_unraisable_hook():
-    global orig_unraisablehook
-    orig_unraisablehook = sys.unraisablehook
-    sys.unraisablehook = regrtest_unraisable_hook
+    print(f"Warning -- {msg}", file=sys.stderr, flush=True)

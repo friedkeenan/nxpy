@@ -1,4 +1,3 @@
-#include <float.h>   /* DBL_MAX_10_EXP */
 #include <stdbool.h>
 #include "Python.h"
 #include "Python-ast.h"
@@ -7,8 +6,6 @@ static PyObject *_str_open_br;
 static PyObject *_str_dbl_open_br;
 static PyObject *_str_close_br;
 static PyObject *_str_dbl_close_br;
-static PyObject *_str_inf;
-static PyObject *_str_replace_inf;
 
 /* Forward declarations for recursion via helper functions. */
 static PyObject *
@@ -18,9 +15,9 @@ append_ast_expr(_PyUnicodeWriter *writer, expr_ty e, int level);
 static int
 append_joinedstr(_PyUnicodeWriter *writer, expr_ty e, bool is_format_spec);
 static int
-append_formattedvalue(_PyUnicodeWriter *writer, expr_ty e);
+append_formattedvalue(_PyUnicodeWriter *writer, expr_ty e, bool is_format_spec);
 static int
-append_ast_slice(_PyUnicodeWriter *writer, expr_ty e);
+append_ast_slice(_PyUnicodeWriter *writer, slice_ty slice);
 
 static int
 append_charp(_PyUnicodeWriter *writer, const char *charp)
@@ -64,28 +61,13 @@ append_charp(_PyUnicodeWriter *writer, const char *charp)
 static int
 append_repr(_PyUnicodeWriter *writer, PyObject *obj)
 {
-    PyObject *repr = PyObject_Repr(obj);
-
+    int ret;
+    PyObject *repr;
+    repr = PyObject_Repr(obj);
     if (!repr) {
         return -1;
     }
-
-    if ((PyFloat_CheckExact(obj) && Py_IS_INFINITY(PyFloat_AS_DOUBLE(obj))) ||
-       PyComplex_CheckExact(obj))
-    {
-        PyObject *new_repr = PyUnicode_Replace(
-            repr,
-            _str_inf,
-            _str_replace_inf,
-            -1
-        );
-        Py_DECREF(repr);
-        if (!new_repr) {
-            return -1;
-        }
-        repr = new_repr;
-    }
-    int ret = _PyUnicodeWriter_WriteStr(writer, repr);
+    ret = _PyUnicodeWriter_WriteStr(writer, repr);
     Py_DECREF(repr);
     return ret;
 }
@@ -601,7 +583,7 @@ append_fstring_element(_PyUnicodeWriter *writer, expr_ty e, bool is_format_spec)
     case JoinedStr_kind:
         return append_joinedstr(writer, e, is_format_spec);
     case FormattedValue_kind:
-        return append_formattedvalue(writer, e);
+        return append_formattedvalue(writer, e, is_format_spec);
     default:
         PyErr_SetString(PyExc_SystemError,
                         "unknown expression kind inside f-string");
@@ -658,7 +640,7 @@ append_joinedstr(_PyUnicodeWriter *writer, expr_ty e, bool is_format_spec)
 }
 
 static int
-append_formattedvalue(_PyUnicodeWriter *writer, expr_ty e)
+append_formattedvalue(_PyUnicodeWriter *writer, expr_ty e, bool is_format_spec)
 {
     const char *conversion;
     const char *outer_brace = "{";
@@ -716,28 +698,6 @@ append_formattedvalue(_PyUnicodeWriter *writer, expr_ty e)
 }
 
 static int
-append_ast_constant(_PyUnicodeWriter *writer, PyObject *constant)
-{
-    if (PyTuple_CheckExact(constant)) {
-        Py_ssize_t i, elem_count;
-
-        elem_count = PyTuple_GET_SIZE(constant);
-        APPEND_STR("(");
-        for (i = 0; i < elem_count; i++) {
-            APPEND_STR_IF(i > 0, ", ");
-            if (append_ast_constant(writer, PyTuple_GET_ITEM(constant, i)) < 0) {
-                return -1;
-            }
-        }
-
-        APPEND_STR_IF(elem_count == 1, ",");
-        APPEND_STR(")");
-        return 0;
-    }
-    return append_repr(writer, constant);
-}
-
-static int
 append_ast_attribute(_PyUnicodeWriter *writer, expr_ty e)
 {
     const char *period;
@@ -758,23 +718,53 @@ append_ast_attribute(_PyUnicodeWriter *writer, expr_ty e)
 }
 
 static int
-append_ast_slice(_PyUnicodeWriter *writer, expr_ty e)
+append_ast_simple_slice(_PyUnicodeWriter *writer, slice_ty slice)
 {
-    if (e->v.Slice.lower) {
-        APPEND_EXPR(e->v.Slice.lower, PR_TEST);
+    if (slice->v.Slice.lower) {
+        APPEND_EXPR(slice->v.Slice.lower, PR_TEST);
     }
 
     APPEND_STR(":");
 
-    if (e->v.Slice.upper) {
-        APPEND_EXPR(e->v.Slice.upper, PR_TEST);
+    if (slice->v.Slice.upper) {
+        APPEND_EXPR(slice->v.Slice.upper, PR_TEST);
     }
 
-    if (e->v.Slice.step) {
+    if (slice->v.Slice.step) {
         APPEND_STR(":");
-        APPEND_EXPR(e->v.Slice.step, PR_TEST);
+        APPEND_EXPR(slice->v.Slice.step, PR_TEST);
     }
     return 0;
+}
+
+static int
+append_ast_ext_slice(_PyUnicodeWriter *writer, slice_ty slice)
+{
+    Py_ssize_t i, dims_count;
+    dims_count = asdl_seq_LEN(slice->v.ExtSlice.dims);
+    for (i = 0; i < dims_count; i++) {
+        APPEND_STR_IF(i > 0, ", ");
+        APPEND(slice, (slice_ty)asdl_seq_GET(slice->v.ExtSlice.dims, i));
+    }
+    return 0;
+}
+
+static int
+append_ast_slice(_PyUnicodeWriter *writer, slice_ty slice)
+{
+    switch (slice->kind) {
+    case Slice_kind:
+        return append_ast_simple_slice(writer, slice);
+    case ExtSlice_kind:
+        return append_ast_ext_slice(writer, slice);
+    case Index_kind:
+        APPEND_EXPR(slice->v.Index.value, PR_TUPLE);
+        return 0;
+    default:
+        PyErr_SetString(PyExc_SystemError,
+                        "unexpected slice kind");
+        return -1;
+    }
 }
 
 static int
@@ -782,7 +772,7 @@ append_ast_subscript(_PyUnicodeWriter *writer, expr_ty e)
 {
     APPEND_EXPR(e->v.Subscript.value, PR_ATOM);
     APPEND_STR("[");
-    APPEND_EXPR(e->v.Subscript.slice, PR_TUPLE);
+    APPEND(slice, e->v.Subscript.slice);
     APPEND_STR_FINISH("]");
 }
 
@@ -829,7 +819,7 @@ append_named_expr(_PyUnicodeWriter *writer, expr_ty e, int level)
 {
     APPEND_STR_IF(level > PR_TUPLE, "(");
     APPEND_EXPR(e->v.NamedExpr.target, PR_ATOM);
-    APPEND_STR(" := ");
+    APPEND_STR(":=");
     APPEND_EXPR(e->v.NamedExpr.value, PR_ATOM);
     APPEND_STR_IF(level > PR_TUPLE, ")");
     return 0;
@@ -875,15 +865,11 @@ append_ast_expr(_PyUnicodeWriter *writer, expr_ty e, int level)
         if (e->v.Constant.value == Py_Ellipsis) {
             APPEND_STR_FINISH("...");
         }
-        if (e->v.Constant.kind != NULL
-            && -1 == _PyUnicodeWriter_WriteStr(writer, e->v.Constant.kind)) {
-            return -1;
-        }
-        return append_ast_constant(writer, e->v.Constant.value);
+        return append_repr(writer, e->v.Constant.value);
     case JoinedStr_kind:
         return append_joinedstr(writer, e, false);
     case FormattedValue_kind:
-        return append_formattedvalue(writer, e);
+        return append_formattedvalue(writer, e, false);
     /* The following exprs can be assignment targets. */
     case Attribute_kind:
         return append_ast_attribute(writer, e);
@@ -891,8 +877,6 @@ append_ast_expr(_PyUnicodeWriter *writer, expr_ty e, int level)
         return append_ast_subscript(writer, e);
     case Starred_kind:
         return append_ast_starred(writer, e);
-    case Slice_kind:
-        return append_ast_slice(writer, e);
     case Name_kind:
         return _PyUnicodeWriter_WriteStr(writer, e->v.Name.id);
     case List_kind:
@@ -925,14 +909,6 @@ maybe_init_static_strings(void)
     }
     if (!_str_dbl_close_br &&
         !(_str_dbl_close_br = PyUnicode_InternFromString("}}"))) {
-        return -1;
-    }
-    if (!_str_inf &&
-        !(_str_inf = PyUnicode_FromString("inf"))) {
-        return -1;
-    }
-    if (!_str_replace_inf &&
-        !(_str_replace_inf = PyUnicode_FromFormat("1e%d", 1 + DBL_MAX_10_EXP))) {
         return -1;
     }
     return 0;

@@ -1,8 +1,7 @@
 /* InterpreterID object */
 
 #include "Python.h"
-#include "pycore_abstract.h"   // _PyIndex_Check()
-#include "pycore_interp.h"     // _PyInterpreterState_LookUpID()
+#include "internal/pycore_pystate.h"
 #include "interpreteridobject.h"
 
 
@@ -43,7 +42,7 @@ interp_id_converter(PyObject *arg, void *ptr)
     if (PyObject_TypeCheck(arg, &_PyInterpreterID_Type)) {
         id = ((interpid *)arg)->id;
     }
-    else if (_PyIndex_Check(arg)) {
+    else if (PyIndex_Check(arg)) {
         id = PyLong_AsLongLong(arg);
         if (id == -1 && PyErr_Occurred()) {
             return 0;
@@ -57,7 +56,7 @@ interp_id_converter(PyObject *arg, void *ptr)
     else {
         PyErr_Format(PyExc_TypeError,
                      "interpreter ID must be an int, got %.100s",
-                     Py_TYPE(arg)->tp_name);
+                     arg->ob_type->tp_name);
         return 0;
     }
     *(int64_t *)ptr = id;
@@ -270,7 +269,7 @@ _PyInterpreterState_GetIDObject(PyInterpreterState *interp)
     if (_PyInterpreterState_IDInitref(interp) != 0) {
         return NULL;
     };
-    int64_t id = PyInterpreterState_GetID(interp);
+    PY_INT64_T id = PyInterpreterState_GetID(interp);
     if (id < 0) {
         return NULL;
     }

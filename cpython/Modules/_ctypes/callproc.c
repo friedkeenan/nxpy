@@ -55,7 +55,7 @@
  */
 
 #include "Python.h"
-#include "structmember.h"         // PyMemberDef
+#include "structmember.h"
 
 #ifdef MS_WIN32
 #include <windows.h>
@@ -156,9 +156,10 @@ _ctypes_get_errobj(int **pspace)
         Py_INCREF(errobj);
     }
     else if (!PyErr_Occurred()) {
-        void *space = PyMem_Calloc(2, sizeof(int));
+        void *space = PyMem_Malloc(sizeof(int) * 2);
         if (space == NULL)
             return NULL;
+        memset(space, 0, sizeof(int) * 2);
         errobj = PyCapsule_New(space, CTYPES_CAPSULE_NAME_PYMEM, pymem_destructor);
         if (errobj == NULL) {
             PyMem_Free(space);
@@ -751,7 +752,7 @@ static int ConvParam(PyObject *obj, Py_ssize_t index, struct argument *pa)
 #if defined(MS_WIN32) && !defined(_WIN32_WCE)
 /*
 Per: https://msdn.microsoft.com/en-us/library/7572ztz4.aspx
-To be returned by value in RAX, user-defined types must have a length
+To be returned by value in RAX, user-defined types must have a length 
 of 1, 2, 4, 8, 16, 32, or 64 bits
 */
 int can_return_struct_as_int(size_t s)
@@ -944,7 +945,7 @@ static PyObject *GetResult(PyObject *restype, void *result, PyObject *checker)
     if (!checker || !retval)
         return retval;
 
-    v = PyObject_CallOneArg(checker, retval);
+    v = PyObject_CallFunctionObjArgs(checker, retval, NULL);
     if (v == NULL)
         _PyTraceback_Add("GetResult", "_ctypes/callproc.c", __LINE__-2);
     Py_DECREF(retval);
@@ -1137,7 +1138,7 @@ PyObject *_ctypes_callproc(PPROC pProc,
         if (argtypes && argtype_count > i) {
             PyObject *v;
             converter = PyTuple_GET_ITEM(argtypes, i);
-            v = PyObject_CallOneArg(converter, arg);
+            v = PyObject_CallFunctionObjArgs(converter, arg, NULL);
             if (v == NULL) {
                 _ctypes_extend_error(PyExc_ArgError, "argument %zd: ", i+1);
                 goto cleanup;
@@ -1384,7 +1385,7 @@ copy_com_pointer(PyObject *self, PyObject *args)
 static PyObject *py_dl_open(PyObject *self, PyObject *args)
 {
     PyObject *name, *name2;
-    const char *name_str;
+    char *name_str;
     void * handle;
 #if HAVE_DECL_RTLD_LOCAL
     int mode = RTLD_NOW | RTLD_LOCAL;
@@ -1711,9 +1712,10 @@ resize(PyObject *self, PyObject *args)
     if (!_CDataObject_HasExternalBuffer(obj)) {
         /* We are currently using the objects default buffer, but it
            isn't large enough any more. */
-        void *ptr = PyMem_Calloc(1, size);
+        void *ptr = PyMem_Malloc(size);
         if (ptr == NULL)
             return PyErr_NoMemory();
+        memset(ptr, 0, size);
         memmove(ptr, obj->b_ptr, obj->b_size);
         obj->b_ptr = ptr;
         obj->b_size = size;
@@ -1737,7 +1739,7 @@ unpickle(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "OO!", &typ, &PyTuple_Type, &state))
         return NULL;
-    obj = _PyObject_CallMethodIdOneArg(typ, &PyId___new__, typ);
+    obj = _PyObject_CallMethodIdObjArgs(typ, &PyId___new__, typ, NULL);
     if (obj == NULL)
         return NULL;
 
@@ -1833,7 +1835,7 @@ pointer(PyObject *self, PyObject *arg)
 
     typ = PyDict_GetItemWithError(_ctypes_ptrtype_cache, (PyObject *)Py_TYPE(arg));
     if (typ) {
-        return PyObject_CallOneArg(typ, arg);
+        return PyObject_CallFunctionObjArgs(typ, arg, NULL);
     }
     else if (PyErr_Occurred()) {
         return NULL;
@@ -1841,7 +1843,7 @@ pointer(PyObject *self, PyObject *arg)
     typ = POINTER(NULL, (PyObject *)Py_TYPE(arg));
     if (typ == NULL)
         return NULL;
-    result = PyObject_CallOneArg(typ, arg);
+    result = PyObject_CallFunctionObjArgs(typ, arg, NULL);
     Py_DECREF(typ);
     return result;
 }

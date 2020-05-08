@@ -11,7 +11,7 @@
 #define PY_SSIZE_T_CLEAN
 #include "Python.h"
 #include "pycore_object.h"
-#include <stddef.h>               // offsetof()
+#include "structmember.h"
 #include "_iomodule.h"
 
 /*[clinic input]
@@ -235,7 +235,7 @@ _io__IOBase_close_impl(PyObject *self)
         Py_RETURN_NONE;
     }
 
-    res = PyObject_CallMethodNoArgs(self, _PyIO_str_flush);
+    res = PyObject_CallMethodObjArgs(self, _PyIO_str_flush, NULL);
 
     PyErr_Fetch(&exc, &val, &tb);
     rc = _PyObject_SetAttrId(self, &PyId___IOBase_closed, Py_True);
@@ -281,13 +281,15 @@ iobase_finalize(PyObject *self)
            finalization process. */
         if (_PyObject_SetAttrId(self, &PyId__finalizing, Py_True))
             PyErr_Clear();
-        res = PyObject_CallMethodNoArgs((PyObject *)self, _PyIO_str_close);
+        res = PyObject_CallMethodObjArgs((PyObject *) self, _PyIO_str_close,
+                                          NULL);
         /* Silencing I/O errors is bad, but printing spurious tracebacks is
            equally as bad, and potentially more frequent (because of
            shutdown issues). */
         if (res == NULL) {
 #ifndef Py_DEBUG
-            if (_Py_GetConfig()->dev_mode) {
+            const PyConfig *config = &_PyInterpreterState_GET_UNSAFE()->config;
+            if (config->dev_mode) {
                 PyErr_WriteUnraisable(self);
             }
             else {
@@ -381,7 +383,7 @@ _io__IOBase_seekable_impl(PyObject *self)
 PyObject *
 _PyIOBase_check_seekable(PyObject *self, PyObject *args)
 {
-    PyObject *res  = PyObject_CallMethodNoArgs(self, _PyIO_str_seekable);
+    PyObject *res  = PyObject_CallMethodObjArgs(self, _PyIO_str_seekable, NULL);
     if (res == NULL)
         return NULL;
     if (res != Py_True) {
@@ -414,7 +416,7 @@ _io__IOBase_readable_impl(PyObject *self)
 PyObject *
 _PyIOBase_check_readable(PyObject *self, PyObject *args)
 {
-    PyObject *res = PyObject_CallMethodNoArgs(self, _PyIO_str_readable);
+    PyObject *res  = PyObject_CallMethodObjArgs(self, _PyIO_str_readable, NULL);
     if (res == NULL)
         return NULL;
     if (res != Py_True) {
@@ -447,7 +449,7 @@ _io__IOBase_writable_impl(PyObject *self)
 PyObject *
 _PyIOBase_check_writable(PyObject *self, PyObject *args)
 {
-    PyObject *res = PyObject_CallMethodNoArgs(self, _PyIO_str_writable);
+    PyObject *res  = PyObject_CallMethodObjArgs(self, _PyIO_str_writable, NULL);
     if (res == NULL)
         return NULL;
     if (res != Py_True) {
@@ -476,7 +478,7 @@ iobase_enter(PyObject *self, PyObject *args)
 static PyObject *
 iobase_exit(PyObject *self, PyObject *args)
 {
-    return PyObject_CallMethodNoArgs(self, _PyIO_str_close);
+    return PyObject_CallMethodObjArgs(self, _PyIO_str_close, NULL);
 }
 
 /* Lower-level APIs */
@@ -555,7 +557,7 @@ _io__IOBase_readline_impl(PyObject *self, Py_ssize_t limit)
         PyObject *b;
 
         if (peek != NULL) {
-            PyObject *readahead = PyObject_CallOneArg(peek, _PyLong_One);
+            PyObject *readahead = PyObject_CallFunctionObjArgs(peek, _PyLong_One, NULL);
             if (readahead == NULL) {
                 /* NOTE: PyErr_SetFromErrno() calls PyErr_CheckSignals()
                    when EINTR occurs so we needn't do it ourselves. */
@@ -654,7 +656,7 @@ iobase_iter(PyObject *self)
 static PyObject *
 iobase_iternext(PyObject *self)
 {
-    PyObject *line = PyObject_CallMethodNoArgs(self, _PyIO_str_readline);
+    PyObject *line = PyObject_CallMethodObjArgs(self, _PyIO_str_readline, NULL);
 
     if (line == NULL)
         return NULL;
@@ -919,7 +921,7 @@ _io__RawIOBase_read_impl(PyObject *self, Py_ssize_t n)
     if (n < 0) {
         _Py_IDENTIFIER(readall);
 
-        return _PyObject_CallMethodIdNoArgs(self, &PyId_readall);
+        return _PyObject_CallMethodId(self, &PyId_readall, NULL);
     }
 
     /* TODO: allocate a bytes object directly instead and manually construct

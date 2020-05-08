@@ -82,7 +82,6 @@ howto/ipaddress,,::,IPv6Address('2001:db8::ffff:ffff')
 howto/ipaddress,,:ffff,IPv6Address('2001:db8::ffff:ffff')
 howto/logging,,:And,"WARNING:And this, too"
 howto/logging,,:And,"WARNING:root:And this, too"
-howto/logging,,:And,"ERROR:root:And non-ASCII stuff, too, like "
 howto/logging,,:Doing,INFO:root:Doing something
 howto/logging,,:Finished,INFO:root:Finished
 howto/logging,,:logger,severity:logger name:message
@@ -92,7 +91,6 @@ howto/logging,,:root,DEBUG:root:This message should go to the log file
 howto/logging,,:root,INFO:root:Doing something
 howto/logging,,:root,INFO:root:Finished
 howto/logging,,:root,INFO:root:So should this
-howto/logging,,:root,"ERROR:root:And non-ASCII stuff, too, like "
 howto/logging,,:root,INFO:root:Started
 howto/logging,,:root,"WARNING:root:And this, too"
 howto/logging,,:root,WARNING:root:Look before you leap!
@@ -108,8 +106,6 @@ howto/pyporting,,::,Programming Language :: Python :: 3
 howto/regex,,::,
 howto/regex,,:foo,(?:foo)
 howto/urllib2,,:password,"""joe:password@example.com"""
-library/ast,,:upper,lower:upper
-library/ast,,:step,lower:upper:step
 library/audioop,,:ipos,"# factor = audioop.findfactor(in_test[ipos*2:ipos*2+len(out_test)],"
 library/bisect,32,:hi,all(val >= x for val in a[i:hi])
 library/bisect,42,:hi,all(val > x for val in a[i:hi])
@@ -149,8 +145,6 @@ library/ipaddress,,:db8,>>> ipaddress.IPv6Address('2001:db8::1000')
 library/ipaddress,,::,>>> ipaddress.IPv6Address('2001:db8::1000')
 library/ipaddress,,:db8,IPv6Address('2001:db8::1000')
 library/ipaddress,,::,IPv6Address('2001:db8::1000')
-library/ipaddress,,::,IPv6Address('ff02::5678%1')
-library/ipaddress,,::,fe80::1234
 library/ipaddress,,:db8,">>> ipaddress.ip_address(""2001:db8::1"").reverse_pointer"
 library/ipaddress,,::,">>> ipaddress.ip_address(""2001:db8::1"").reverse_pointer"
 library/ipaddress,,::,"""::abc:7:def"""

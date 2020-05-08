@@ -1,5 +1,6 @@
 #include "Python.h"
-#include <stddef.h>               // offsetof()
+#include "structmember.h" /* offsetof */
+#include "pythread.h"
 
 /*[clinic input]
 module _queue
@@ -301,8 +302,6 @@ static PyMethodDef simplequeue_methods[] = {
     _QUEUE_SIMPLEQUEUE_PUT_METHODDEF
     _QUEUE_SIMPLEQUEUE_PUT_NOWAIT_METHODDEF
     _QUEUE_SIMPLEQUEUE_QSIZE_METHODDEF
-    {"__class_getitem__",    (PyCFunction)Py_GenericAlias,
-    METH_O|METH_CLASS,       PyDoc_STR("See PEP 585")},
     {NULL,           NULL}              /* sentinel */
 };
 
@@ -391,9 +390,11 @@ PyInit__queue(void)
     if (PyModule_AddObject(m, "Empty", EmptyError) < 0)
         return NULL;
 
-    if (PyModule_AddType(m, &PySimpleQueueType) < 0) {
+    if (PyType_Ready(&PySimpleQueueType) < 0)
         return NULL;
-    }
+    Py_INCREF(&PySimpleQueueType);
+    if (PyModule_AddObject(m, "SimpleQueue", (PyObject *)&PySimpleQueueType) < 0)
+        return NULL;
 
     return m;
 }

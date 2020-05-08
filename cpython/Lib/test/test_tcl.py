@@ -3,7 +3,6 @@ import re
 import subprocess
 import sys
 import os
-import warnings
 from test import support
 
 # Skip this test if the _tkinter module wasn't built.
@@ -574,12 +573,9 @@ class TclTest(unittest.TestCase):
     def test_split(self):
         split = self.interp.tk.split
         call = self.interp.tk.call
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', r'\bsplit\b.*\bsplitlist\b',
-                                    DeprecationWarning)
-            self.assertRaises(TypeError, split)
-            self.assertRaises(TypeError, split, 'a', 'b')
-            self.assertRaises(TypeError, split, 2)
+        self.assertRaises(TypeError, split)
+        self.assertRaises(TypeError, split, 'a', 'b')
+        self.assertRaises(TypeError, split, 2)
         testcases = [
             ('2', '2'),
             ('', ''),
@@ -621,8 +617,7 @@ class TclTest(unittest.TestCase):
                     expected),
             ]
         for arg, res in testcases:
-            with self.assertWarns(DeprecationWarning):
-                self.assertEqual(split(arg), res, msg=arg)
+            self.assertEqual(split(arg), res, msg=arg)
 
     def test_splitdict(self):
         splitdict = tkinter._splitdict

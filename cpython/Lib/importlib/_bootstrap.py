@@ -67,7 +67,6 @@ class _ModuleLock:
         # Deadlock avoidance for concurrent circular imports.
         me = _thread.get_ident()
         tid = self.owner
-        seen = set()
         while True:
             lock = _blocking_on.get(tid)
             if lock is None:
@@ -75,14 +74,6 @@ class _ModuleLock:
             tid = lock.owner
             if tid == me:
                 return True
-            if tid in seen:
-                # bpo 38091: the chain of tid's we encounter here
-                # eventually leads to a fixpoint or a cycle, but
-                # does not reach 'me'.  This means we would not
-                # actually deadlock.  This can happen if other
-                # threads are at the beginning of acquire() below.
-                return False
-            seen.add(tid)
 
     def acquire(self):
         """
@@ -380,7 +371,7 @@ class ModuleSpec:
                     self.cached == other.cached and
                     self.has_location == other.has_location)
         except AttributeError:
-            return NotImplemented
+            return False
 
     @property
     def cached(self):
@@ -722,8 +713,6 @@ class BuiltinImporter:
 
     """
 
-    _ORIGIN = "built-in"
-
     @staticmethod
     def module_repr(module):
         """Return repr for the module.
@@ -731,14 +720,14 @@ class BuiltinImporter:
         The method is deprecated.  The import machinery does the job itself.
 
         """
-        return f'<module {module.__name__!r} ({BuiltinImporter._ORIGIN})>'
+        return '<module {!r} (built-in)>'.format(module.__name__)
 
     @classmethod
     def find_spec(cls, fullname, path=None, target=None):
         if path is not None:
             return None
         if _imp.is_builtin(fullname):
-            return spec_from_loader(fullname, cls, origin=cls._ORIGIN)
+            return spec_from_loader(fullname, cls, origin='built-in')
         else:
             return None
 
@@ -884,7 +873,7 @@ def _resolve_name(name, package, level):
     """Resolve a relative module name to an absolute one."""
     bits = package.rsplit('.', level - 1)
     if len(bits) < level:
-        raise ImportError('attempted relative import beyond top-level package')
+        raise ValueError('attempted relative import beyond top-level package')
     base = bits[0]
     return '{}.{}'.format(base, name) if name else base
 
@@ -987,12 +976,7 @@ def _find_and_load_unlocked(name, import_):
     if parent:
         # Set the module as an attribute on its parent.
         parent_module = sys.modules[parent]
-        child = name.rpartition('.')[2]
-        try:
-            setattr(parent_module, child, module)
-        except AttributeError:
-            msg = f"Cannot set an attribute on {parent!r} for child module {child!r}"
-            _warnings.warn(msg, ImportWarning)
+        setattr(parent_module, name.rpartition('.')[2], module)
     return module
 
 

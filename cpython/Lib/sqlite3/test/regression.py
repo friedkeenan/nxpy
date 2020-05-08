@@ -68,7 +68,7 @@ class RegressionTests(unittest.TestCase):
     def CheckColumnNameWithSpaces(self):
         cur = self.con.cursor()
         cur.execute('select 1 as "foo bar [datetime]"')
-        self.assertEqual(cur.description[0][0], "foo bar [datetime]")
+        self.assertEqual(cur.description[0][0], "foo bar")
 
         cur.execute('select 1 as "foo baz"')
         self.assertEqual(cur.description[0][0], "foo baz")
@@ -262,7 +262,7 @@ class RegressionTests(unittest.TestCase):
         Call a connection with a non-string SQL request: check error handling
         of the statement constructor.
         """
-        self.assertRaises(TypeError, self.con, 1)
+        self.assertRaises(sqlite.Warning, self.con, 1)
 
     def CheckCollation(self):
         def collation_cb(a, b):

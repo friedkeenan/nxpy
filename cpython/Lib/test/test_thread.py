@@ -225,31 +225,30 @@ class TestForkInThread(unittest.TestCase):
     @unittest.skipUnless(hasattr(os, 'fork'), 'need os.fork')
     @support.reap_threads
     def test_forkinthread(self):
-        pid = None
+        status = "not set"
 
-        def fork_thread(read_fd, write_fd):
-            nonlocal pid
+        def thread1():
+            nonlocal status
 
             # fork in a thread
             pid = os.fork()
-            if pid:
-                # parent process
-                return
-
-            # child process
-            try:
-                os.close(read_fd)
-                os.write(write_fd, b"OK")
-            finally:
-                os._exit(0)
+            if pid == 0:
+                # child
+                try:
+                    os.close(self.read_fd)
+                    os.write(self.write_fd, b"OK")
+                finally:
+                    os._exit(0)
+            else:
+                # parent
+                os.close(self.write_fd)
+                pid, status = os.waitpid(pid, 0)
 
         with support.wait_threads_exit():
-            thread.start_new_thread(fork_thread, (self.read_fd, self.write_fd))
-            self.assertEqual(os.read(self.read_fd, 2), b"OK")
-            os.close(self.write_fd)
-
-        self.assertIsNotNone(pid)
-        support.wait_process(pid, exitcode=0)
+            thread.start_new_thread(thread1, ())
+            self.assertEqual(os.read(self.read_fd, 2), b"OK",
+                             "Unable to fork() in thread")
+        self.assertEqual(status, 0)
 
     def tearDown(self):
         try:

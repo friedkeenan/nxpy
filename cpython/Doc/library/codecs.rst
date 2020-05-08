@@ -1198,8 +1198,7 @@ particular, the following variants typically exist:
 +-----------------+--------------------------------+--------------------------------+
 | mac_iceland     | maciceland                     | Icelandic                      |
 +-----------------+--------------------------------+--------------------------------+
-| mac_latin2      | maclatin2, maccentraleurope,   | Central and Eastern Europe     |
-|                 | mac_centeuro                   |                                |
+| mac_latin2      | maclatin2, maccentraleurope    | Central and Eastern Europe     |
 +-----------------+--------------------------------+--------------------------------+
 | mac_roman       | macroman, macintosh            | Western Europe                 |
 +-----------------+--------------------------------+--------------------------------+

@@ -10,25 +10,6 @@ import sys
 import sysconfig
 from glob import glob
 
-
-try:
-    import subprocess
-    del subprocess
-    SUBPROCESS_BOOTSTRAP = False
-except ImportError:
-    # Bootstrap Python: distutils.spawn uses subprocess to build C extensions,
-    # subprocess requires C extensions built by setup.py like _posixsubprocess.
-    #
-    # Use _bootsubprocess which only uses the os module.
-    #
-    # It is dropped from sys.modules as soon as all C extension modules
-    # are built.
-    import _bootsubprocess
-    sys.modules['subprocess'] = _bootsubprocess
-    del _bootsubprocess
-    SUBPROCESS_BOOTSTRAP = True
-
-
 from distutils import log
 from distutils.command.build_ext import build_ext
 from distutils.command.build_scripts import build_scripts
@@ -93,11 +74,6 @@ Programming Language :: C
 Programming Language :: Python
 Topic :: Software Development
 """
-
-
-def run_command(cmd):
-    status = os.system(cmd)
-    return os.waitstatus_to_exitcode(status)
 
 
 # Set common compiler and linker flags derived from the Makefile,
@@ -170,7 +146,7 @@ def macosx_sdk_root():
         return MACOS_SDK_ROOT
 
     cflags = sysconfig.get_config_var('CFLAGS')
-    m = re.search(r'-isysroot\s*(\S+)', cflags)
+    m = re.search(r'-isysroot\s+(\S+)', cflags)
     if m is not None:
         MACOS_SDK_ROOT = m.group(1)
     else:
@@ -181,10 +157,10 @@ def macosx_sdk_root():
             os.unlink(tmpfile)
         except:
             pass
-        ret = run_command('%s -E -v - </dev/null 2>%s 1>/dev/null' % (cc, tmpfile))
+        ret = os.system('%s -E -v - </dev/null 2>%s 1>/dev/null' % (cc, tmpfile))
         in_incdirs = False
         try:
-            if ret == 0:
+            if ret >> 8 == 0:
                 with open(tmpfile) as fp:
                     for line in fp.readlines():
                         if line.startswith("#include <...>"):
@@ -333,14 +309,16 @@ class PyBuildExt(build_ext):
     def add(self, ext):
         self.extensions.append(ext)
 
-    def set_srcdir(self):
+    def build_extensions(self):
         self.srcdir = sysconfig.get_config_var('srcdir')
         if not self.srcdir:
             # Maybe running on Windows but not using CYGWIN?
             raise ValueError("No source directory; cannot proceed.")
         self.srcdir = os.path.abspath(self.srcdir)
 
-    def remove_disabled(self):
+        # Detect which modules should be compiled
+        self.detect_modules()
+
         # Remove modules that are present on the disabled list
         extensions = [ext for ext in self.extensions
                       if ext.name not in DISABLED_MODULE_LIST]
@@ -351,7 +329,6 @@ class PyBuildExt(build_ext):
             extensions.append(ctypes)
         self.extensions = extensions
 
-    def update_sources_depends(self):
         # Fix up the autodetected modules, prefixing all the source files
         # with Modules/.
         moddirlist = [os.path.join(self.srcdir, 'Modules')]
@@ -364,6 +341,14 @@ class PyBuildExt(build_ext):
         headers = [sysconfig.get_config_h_filename()]
         headers += glob(os.path.join(sysconfig.get_path('include'), "*.h"))
 
+        # The sysconfig variables built by makesetup that list the already
+        # built modules and the disabled modules as configured by the Setup
+        # files.
+        sysconf_built = sysconfig.get_config_var('MODBUILT_NAMES').split()
+        sysconf_dis = sysconfig.get_config_var('MODDISABLED_NAMES').split()
+
+        mods_built = []
+        mods_disabled = []
         for ext in self.extensions:
             ext.sources = [ find_module_file(filename, moddirlist)
                             for filename in ext.sources ]
@@ -375,16 +360,6 @@ class PyBuildExt(build_ext):
             # re-compile extensions if a header file has been changed
             ext.depends.extend(headers)
 
-    def remove_configured_extensions(self):
-        # The sysconfig variables built by makesetup that list the already
-        # built modules and the disabled modules as configured by the Setup
-        # files.
-        sysconf_built = sysconfig.get_config_var('MODBUILT_NAMES').split()
-        sysconf_dis = sysconfig.get_config_var('MODDISABLED_NAMES').split()
-
-        mods_built = []
-        mods_disabled = []
-        for ext in self.extensions:
             # If a module has already been built or has been disabled in the
             # Setup files, don't build it here.
             if ext.name in sysconf_built:
@@ -402,9 +377,6 @@ class PyBuildExt(build_ext):
                 if os.path.exists(fullpath):
                     os.unlink(fullpath)
 
-        return (mods_built, mods_disabled)
-
-    def set_compiler_executables(self):
         # When you run "make CC=altcc" or something similar, you really want
         # those environment variables passed into the setup.py phase.  Here's
         # a small set of useful ones.
@@ -417,31 +389,11 @@ class PyBuildExt(build_ext):
             args['compiler_so'] = compiler + ' ' + ccshared + ' ' + cflags
         self.compiler.set_executables(**args)
 
-    def build_extensions(self):
-        self.set_srcdir()
-
-        # Detect which modules should be compiled
-        self.detect_modules()
-
-        self.remove_disabled()
-
-        self.update_sources_depends()
-        mods_built, mods_disabled = self.remove_configured_extensions()
-        self.set_compiler_executables()
-
         build_ext.build_extensions(self)
-
-        if SUBPROCESS_BOOTSTRAP:
-            # Drop our custom subprocess module:
-            # use the newly built subprocess module
-            del sys.modules['subprocess']
 
         for ext in self.extensions:
             self.check_extension_import(ext)
 
-        self.summary(mods_built, mods_disabled)
-
-    def summary(self, mods_built, mods_disabled):
         longest = max([len(e.name) for e in self.extensions], default=0)
         if self.failed or self.failed_on_import:
             all_failed = self.failed + self.failed_on_import
@@ -600,11 +552,11 @@ class PyBuildExt(build_ext):
         tmpfile = os.path.join(self.build_temp, 'multiarch')
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
-        ret = run_command(
+        ret = os.system(
             '%s -print-multiarch > %s 2> /dev/null' % (cc, tmpfile))
         multiarch_path_component = ''
         try:
-            if ret == 0:
+            if ret >> 8 == 0:
                 with open(tmpfile) as fp:
                     multiarch_path_component = fp.readline().strip()
         finally:
@@ -625,11 +577,11 @@ class PyBuildExt(build_ext):
         tmpfile = os.path.join(self.build_temp, 'multiarch')
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
-        ret = run_command(
+        ret = os.system(
             'dpkg-architecture %s -qDEB_HOST_MULTIARCH > %s 2> /dev/null' %
             (opt, tmpfile))
         try:
-            if ret == 0:
+            if ret >> 8 == 0:
                 with open(tmpfile) as fp:
                     multiarch_path_component = fp.readline().strip()
                 add_dir_to_list(self.compiler.library_dirs,
@@ -644,12 +596,12 @@ class PyBuildExt(build_ext):
         tmpfile = os.path.join(self.build_temp, 'ccpaths')
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
-        ret = run_command('%s -E -v - </dev/null 2>%s 1>/dev/null' % (cc, tmpfile))
+        ret = os.system('%s -E -v - </dev/null 2>%s 1>/dev/null' % (cc, tmpfile))
         is_gcc = False
         is_clang = False
         in_incdirs = False
         try:
-            if ret == 0:
+            if ret >> 8 == 0:
                 with open(tmpfile) as fp:
                     for line in fp.readlines():
                         if line.startswith("gcc version"):
@@ -782,14 +734,12 @@ class PyBuildExt(build_ext):
 
         # math library functions, e.g. sin()
         self.add(Extension('math',  ['mathmodule.c'],
-                           extra_compile_args=['-DPy_BUILD_CORE_MODULE'],
                            extra_objects=[shared_math],
                            depends=['_math.h', shared_math],
                            libraries=['m']))
 
         # complex math library functions
         self.add(Extension('cmath', ['cmathmodule.c'],
-                           extra_compile_args=['-DPy_BUILD_CORE_MODULE'],
                            extra_objects=[shared_math],
                            depends=['_math.h', shared_math],
                            libraries=['m']))
@@ -808,8 +758,7 @@ class PyBuildExt(build_ext):
         self.add(Extension('_datetime', ['_datetimemodule.c'],
                            libraries=['m']))
         # random number generator implemented in C
-        self.add(Extension("_random", ["_randommodule.c"],
-                           extra_compile_args=['-DPy_BUILD_CORE_MODULE']))
+        self.add(Extension("_random", ["_randommodule.c"]))
         # bisect
         self.add(Extension("_bisect", ["_bisectmodule.c"]))
         # heapq
@@ -938,14 +887,14 @@ class PyBuildExt(build_ext):
         # Determine if readline is already linked against curses or tinfo.
         if do_readline:
             if CROSS_COMPILING:
-                ret = run_command("%s -d %s | grep '(NEEDED)' > %s"
+                ret = os.system("%s -d %s | grep '(NEEDED)' > %s" \
                                 % (sysconfig.get_config_var('READELF'),
                                    do_readline, tmpfile))
             elif find_executable('ldd'):
-                ret = run_command("ldd %s > %s" % (do_readline, tmpfile))
+                ret = os.system("ldd %s > %s" % (do_readline, tmpfile))
             else:
-                ret = 1
-            if ret == 0:
+                ret = 256
+            if ret >> 8 == 0:
                 with open(tmpfile) as fp:
                     for ln in fp:
                         if 'curses' in ln:
@@ -1069,9 +1018,9 @@ class PyBuildExt(build_ext):
         if (curses_enabled and not skip_curses_panel and
                 self.compiler.find_library_file(self.lib_dirs, panel_library)):
             self.add(Extension('_curses_panel', ['_curses_panel.c'],
-                           include_dirs=curses_includes,
-                           define_macros=curses_defines,
-                           libraries=[panel_library, *curses_libs]))
+                               include_dirs=curses_includes,
+                               define_macros=curses_defines,
+                               libraries=[panel_library, *curses_libs]))
         elif not skip_curses_panel:
             self.missing.append('_curses_panel')
 
@@ -1660,9 +1609,9 @@ class PyBuildExt(build_ext):
                              ]
 
             cc = sysconfig.get_config_var('CC').split()[0]
-            ret = run_command(
+            ret = os.system(
                       '"%s" -Werror -Wno-unreachable-code -E -xc /dev/null >/dev/null 2>&1' % cc)
-            if ret == 0:
+            if ret >> 8 == 0:
                 extra_compile_args.append('-Wno-unreachable-code')
 
         self.add(Extension('pyexpat',
@@ -1865,9 +1814,9 @@ class PyBuildExt(build_ext):
         # Note: cannot use os.popen or subprocess here, that
         # requires extensions that are not available here.
         if is_macosx_sdk_path(F):
-            run_command("file %s/Tk.framework/Tk | grep 'for architecture' > %s"%(os.path.join(sysroot, F[1:]), tmpfile))
+            os.system("file %s/Tk.framework/Tk | grep 'for architecture' > %s"%(os.path.join(sysroot, F[1:]), tmpfile))
         else:
-            run_command("file %s/Tk.framework/Tk | grep 'for architecture' > %s"%(F, tmpfile))
+            os.system("file %s/Tk.framework/Tk | grep 'for architecture' > %s"%(F, tmpfile))
 
         with open(tmpfile) as fp:
             detected_archs = []
@@ -2045,7 +1994,7 @@ class PyBuildExt(build_ext):
         # Thomas Heller's _ctypes module
         self.use_system_libffi = False
         include_dirs = []
-        extra_compile_args = ['-DPy_BUILD_CORE_MODULE']
+        extra_compile_args = []
         extra_link_args = []
         sources = ['_ctypes/_ctypes.c',
                    '_ctypes/callbacks.c',
@@ -2148,7 +2097,7 @@ class PyBuildExt(build_ext):
               '_decimal/libmpdec/fnt.c',
               '_decimal/libmpdec/fourstep.c',
               '_decimal/libmpdec/io.c',
-              '_decimal/libmpdec/mpalloc.c',
+              '_decimal/libmpdec/memory.c',
               '_decimal/libmpdec/mpdecimal.c',
               '_decimal/libmpdec/numbertheory.c',
               '_decimal/libmpdec/sixstep.c',
@@ -2299,10 +2248,8 @@ class PyBuildExt(build_ext):
         # It's harmless and the object code is tiny (40-50 KiB per module,
         # only loaded when actually used).
         self.add(Extension('_sha256', ['sha256module.c'],
-                           extra_compile_args=['-DPy_BUILD_CORE_MODULE'],
                            depends=['hashlib.h']))
         self.add(Extension('_sha512', ['sha512module.c'],
-                           extra_compile_args=['-DPy_BUILD_CORE_MODULE'],
                            depends=['hashlib.h']))
         self.add(Extension('_md5', ['md5module.c'],
                            depends=['hashlib.h']))

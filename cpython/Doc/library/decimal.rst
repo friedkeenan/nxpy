@@ -1475,18 +1475,9 @@ are also included in the pure Python version for compatibility.
 
 .. data:: HAVE_THREADS
 
-   The value is ``True``.  Deprecated, because Python now always has threads.
-
-.. deprecated:: 3.9
-
-.. data:: HAVE_CONTEXTVAR
-
-   The default value is ``True``. If Python is compiled ``--without-decimal-contextvar``,
-   the C version uses a thread-local rather than a coroutine-local context and the value
-   is ``False``.  This is slightly faster in some nested context scenarios.
-
-.. versionadded:: 3.9 backported to 3.7 and 3.8.
-
+   The default value is ``True``. If Python is compiled without threads, the
+   C version automatically disables the expensive thread local context
+   machinery. In this case, the value is ``False``.
 
 Rounding modes
 --------------

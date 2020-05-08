@@ -11,7 +11,7 @@ import py_compile
 import zipfile
 
 from importlib.util import source_from_cache
-from test.support import make_legacy_pyc
+from test.support import make_legacy_pyc, strip_python_stderr
 
 
 # Cached result of the expensive test performed in the function below.
@@ -134,6 +134,7 @@ def run_python_until_end(*args, **env_vars):
             proc.kill()
             subprocess._cleanup()
     rc = proc.returncode
+    err = strip_python_stderr(err)
     return _PythonRunResult(rc, out, err), cmd_line
 
 def _assert_python(expected_success, /, *args, **env_vars):

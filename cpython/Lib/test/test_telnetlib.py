@@ -5,10 +5,9 @@ import threading
 import contextlib
 
 from test import support
-from test.support import socket_helper
 import unittest
 
-HOST = socket_helper.HOST
+HOST = support.HOST
 
 def server(evt, serv):
     serv.listen()
@@ -27,7 +26,7 @@ class GeneralTests(unittest.TestCase):
         self.evt = threading.Event()
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.settimeout(60)  # Safety net. Look issue 11812
-        self.port = socket_helper.bind_port(self.sock)
+        self.port = support.bind_port(self.sock)
         self.thread = threading.Thread(target=server, args=(self.evt,self.sock))
         self.thread.setDaemon(True)
         self.thread.start()

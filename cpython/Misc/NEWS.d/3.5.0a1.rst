@@ -4992,7 +4992,7 @@ directory.
 .. nonce: vlM720
 .. section: Build
 
-For BerkeleyDB and Sqlite, only add the found library and include directories
+For BerkelyDB and Sqlite, only add the found library and include directories
 if they aren't already being searched. This avoids an explicit runtime
 library dependency.
 

@@ -49,7 +49,7 @@ Quick Reference
    +------------------------------------------------+-----------------------------------+-------------------+---+---+---+---+
    | :c:member:`~PyTypeObject.tp_dealloc`           | :c:type:`destructor`              |                   | X | X |   | X |
    +------------------------------------------------+-----------------------------------+-------------------+---+---+---+---+
-   | :c:member:`~PyTypeObject.tp_vectorcall_offset` | Py_ssize_t                        |                   |   | X |   | X |
+   | :c:member:`~PyTypeObject.tp_vectorcall_offset` | Py_ssize_t                        |                   |   |   |   | ? |
    +------------------------------------------------+-----------------------------------+-------------------+---+---+---+---+
    | (:c:member:`~PyTypeObject.tp_getattr`)         | :c:type:`getattrfunc`             | __getattribute__, |   |   |   | G |
    |                                                |                                   | __getattr__       |   |   |   |   |
@@ -145,8 +145,15 @@ Quick Reference
    +------------------------------------------------+-----------------------------------+-------------------+---+---+---+---+
    | :c:member:`~PyTypeObject.tp_finalize`          | :c:type:`destructor`              | __del__           |   |   |   | X |
    +------------------------------------------------+-----------------------------------+-------------------+---+---+---+---+
-   | :c:member:`~PyTypeObject.tp_vectorcall`        | :c:type:`vectorcallfunc`          |                   |   |   |   |   |
-   +------------------------------------------------+-----------------------------------+-------------------+---+---+---+---+
+
+If :const:`COUNT_ALLOCS` is defined then the following (internal-only)
+fields exist as well:
+
+* :c:member:`~PyTypeObject.tp_allocs`
+* :c:member:`~PyTypeObject.tp_frees`
+* :c:member:`~PyTypeObject.tp_maxalloc`
+* :c:member:`~PyTypeObject.tp_prev`
+* :c:member:`~PyTypeObject.tp_next`
 
 .. [#slots]
    A slot name in parentheses indicates it is (effectively) deprecated.
@@ -173,7 +180,7 @@ Quick Reference
 
    .. code-block:: none
 
-      X - type slot is inherited via *PyType_Ready* if defined with a *NULL* value
+      X - type slot is inherited via PyType_Ready if defined with a NULL value
       % - the slots of the sub-struct are inherited individually
       G - inherited, but only in combination with other slots; see the slot's description
       ? - it's complicated; see the slot's description
@@ -680,29 +687,42 @@ and :c:type:`PyType_Type` effectively act as defaults.)
 .. c:member:: Py_ssize_t PyTypeObject.tp_vectorcall_offset
 
    An optional offset to a per-instance function that implements calling
-   the object using the :ref:`vectorcall protocol <vectorcall>`,
-   a more efficient alternative
+   the object using the *vectorcall* protocol, a more efficient alternative
    of the simpler :c:member:`~PyTypeObject.tp_call`.
 
-   This field is only used if the flag :const:`Py_TPFLAGS_HAVE_VECTORCALL`
+   This field is only used if the flag :const:`_Py_TPFLAGS_HAVE_VECTORCALL`
    is set. If so, this must be a positive integer containing the offset in the
    instance of a :c:type:`vectorcallfunc` pointer.
+   The signature is the same as for :c:func:`_PyObject_Vectorcall`::
 
-   The *vectorcallfunc* pointer may be ``NULL``, in which case the instance behaves
-   as if :const:`Py_TPFLAGS_HAVE_VECTORCALL` was not set: calling the instance
+        PyObject *vectorcallfunc(PyObject *callable, PyObject *const *args, size_t nargsf, PyObject *kwnames)
+
+   The *vectorcallfunc* pointer may be zero, in which case the instance behaves
+   as if :const:`_Py_TPFLAGS_HAVE_VECTORCALL` was not set: calling the instance
    falls back to :c:member:`~PyTypeObject.tp_call`.
 
-   Any class that sets ``Py_TPFLAGS_HAVE_VECTORCALL`` must also set
+   Any class that sets ``_Py_TPFLAGS_HAVE_VECTORCALL`` must also set
    :c:member:`~PyTypeObject.tp_call` and make sure its behaviour is consistent
    with the *vectorcallfunc* function.
-   This can be done by setting *tp_call* to :c:func:`PyVectorcall_Call`.
+   This can be done by setting *tp_call* to ``PyVectorcall_Call``:
 
-   .. warning::
+   .. c:function:: PyObject *PyVectorcall_Call(PyObject *callable, PyObject *tuple, PyObject *dict)
+
+      Call *callable*'s *vectorcallfunc* with positional and keyword
+      arguments given in a tuple and dict, respectively.
+
+      This function is intended to be used in the ``tp_call`` slot.
+      It does not fall back to ``tp_call`` and it currently does not check the
+      ``_Py_TPFLAGS_HAVE_VECTORCALL`` flag.
+      To call an object, use one of the :c:func:`PyObject_Call <PyObject_Call>`
+      functions instead.
+
+   .. note::
 
       It is not recommended for :ref:`heap types <heap-types>` to implement
       the vectorcall protocol.
-      When a user sets :attr:`__call__` in Python code, only *tp_call* is updated,
-      likely making it inconsistent with the vectorcall function.
+      When a user sets ``__call__`` in Python code, only ``tp_call`` is updated,
+      possibly making it inconsistent with the vectorcall function.
 
    .. note::
 
@@ -712,19 +732,18 @@ and :c:type:`PyType_Type` effectively act as defaults.)
 
    .. versionchanged:: 3.8
 
-      Before version 3.8, this slot was named ``tp_print``.
-      In Python 2.x, it was used for printing to a file.
-      In Python 3.0 to 3.7, it was unused.
+      This slot was used for print formatting in Python 2.x.
+      In Python 3.0 to 3.7, it was reserved and named ``tp_print``.
 
    **Inheritance:**
 
-   This field is always inherited.
-   However, the :const:`Py_TPFLAGS_HAVE_VECTORCALL` flag is not
-   always inherited. If it's not, then the subclass won't use
-   :ref:`vectorcall <vectorcall>`, except when
-   :c:func:`PyVectorcall_Call` is explicitly called.
-   This is in particular the case for `heap types`_
-   (including subclasses defined in Python).
+   This field is inherited by subtypes together with
+   :c:member:`~PyTypeObject.tp_call`: a subtype inherits
+   :c:member:`~PyTypeObject.tp_vectorcall_offset` from its base type when
+   the subtype’s :c:member:`~PyTypeObject.tp_call` is ``NULL``.
+
+   Note that `heap types`_ (including subclasses defined in Python) do not
+   inherit the :const:`_Py_TPFLAGS_HAVE_VECTORCALL` flag.
 
 
 .. c:member:: getattrfunc PyTypeObject.tp_getattr
@@ -946,7 +965,7 @@ and :c:type:`PyType_Type` effectively act as defaults.)
 
    The signature is the same as for :c:func:`PyObject_SetAttr`::
 
-      int tp_setattro(PyObject *self, PyObject *attr, PyObject *value);
+      PyObject *tp_setattro(PyObject *self, PyObject *attr, PyObject *value);
 
    In addition, setting *value* to ``NULL`` to delete an attribute must be
    supported.  It is usually convenient to set this field to
@@ -1152,20 +1171,27 @@ and :c:type:`PyType_Type` effectively act as defaults.)
          :c:member:`~PyTypeObject.tp_finalize` slot is always present in the
          type structure.
 
+   .. data:: _Py_TPFLAGS_HAVE_VECTORCALL
 
-   .. data:: Py_TPFLAGS_HAVE_VECTORCALL
-
-      This bit is set when the class implements
-      the :ref:`vectorcall protocol <vectorcall>`.
+      This bit is set when the class implements the vectorcall protocol.
       See :c:member:`~PyTypeObject.tp_vectorcall_offset` for details.
 
       **Inheritance:**
 
-      This bit is inherited for *static* subtypes if
-      :c:member:`~PyTypeObject.tp_call` is also inherited.
-      `Heap types`_ do not inherit ``Py_TPFLAGS_HAVE_VECTORCALL``.
+      This bit is set on *static* subtypes if ``tp_flags`` is not overridden:
+      a subtype inherits ``_Py_TPFLAGS_HAVE_VECTORCALL`` from its base type
+      when the subtype’s :c:member:`~PyTypeObject.tp_call` is ``NULL``
+      and the subtype's ``Py_TPFLAGS_HEAPTYPE`` is not set.
 
-      .. versionadded:: 3.9
+      `Heap types`_ do not inherit ``_Py_TPFLAGS_HAVE_VECTORCALL``.
+
+      .. note::
+
+         This flag is provisional and expected to become public in Python 3.9,
+         with a different name and, possibly, changed semantics.
+         If you use vectorcall, plan for updating your code for Python 3.9.
+
+      .. versionadded:: 3.8
 
 
 .. c:member:: const char* PyTypeObject.tp_doc
@@ -1192,7 +1218,7 @@ and :c:type:`PyType_Type` effectively act as defaults.)
    The :c:member:`~PyTypeObject.tp_traverse` pointer is used by the garbage collector to detect
    reference cycles. A typical implementation of a :c:member:`~PyTypeObject.tp_traverse` function
    simply calls :c:func:`Py_VISIT` on each of the instance's members that are Python
-   objects that the instance owns. For example, this is function :c:func:`local_traverse` from the
+   objects.  For example, this is function :c:func:`local_traverse` from the
    :mod:`_thread` extension module::
 
       static int
@@ -1211,18 +1237,6 @@ and :c:type:`PyType_Type` effectively act as defaults.)
    On the other hand, even if you know a member can never be part of a cycle, as a
    debugging aid you may want to visit it anyway just so the :mod:`gc` module's
    :func:`~gc.get_referents` function will include it.
-
-   .. warning::
-       When implementing :c:member:`~PyTypeObject.tp_traverse`, only the members
-       that the instance *owns* (by having strong references to them) must be
-       visited. For instance, if an object supports weak references via the
-       :c:member:`~PyTypeObject.tp_weaklist` slot, the pointer supporting
-       the linked list (what *tp_weaklist* points to) must **not** be
-       visited as the instance does not directly own the weak references to itself
-       (the weakreference list is there to support the weak reference machinery,
-       but the instance has no strong reference to the elements inside it, as they
-       are allowed to be removed even if the instance is still alive).
-
 
    Note that :c:func:`Py_VISIT` requires the *visit* and *arg* parameters to
    :c:func:`local_traverse` to have these specific names; don't name them just
@@ -1701,9 +1715,9 @@ and :c:type:`PyType_Type` effectively act as defaults.)
 
       PyObject *tp_new(PyTypeObject *subtype, PyObject *args, PyObject *kwds);
 
-   The *subtype* argument is the type of the object being created; the *args* and
+   The subtype argument is the type of the object being created; the *args* and
    *kwds* arguments represent positional and keyword arguments of the call to the
-   type.  Note that *subtype* doesn't have to equal the type whose :c:member:`~PyTypeObject.tp_new`
+   type.  Note that subtype doesn't have to equal the type whose :c:member:`~PyTypeObject.tp_new`
    function is called; it may be a subtype of that type (but not an unrelated
    type).
 
@@ -1886,20 +1900,30 @@ and :c:type:`PyType_Type` effectively act as defaults.)
    .. seealso:: "Safe object finalization" (:pep:`442`)
 
 
-.. c:member:: vectorcallfunc PyTypeObject.tp_vectorcall
+The remaining fields are only defined if the feature test macro
+:const:`COUNT_ALLOCS` is defined, and are for internal use only. They are
+documented here for completeness.  None of these fields are inherited by
+subtypes.
 
-   Vectorcall function to use for calls of this type object.
-   In other words, it is used to implement
-   :ref:`vectorcall <vectorcall>` for ``type.__call__``.
-   If ``tp_vectorcall`` is ``NULL``, the default call implementation
-   using :attr:`__new__` and :attr:`__init__` is used.
+.. c:member:: Py_ssize_t PyTypeObject.tp_allocs
 
-   **Inheritance:**
+   Number of allocations.
 
-   This field is never inherited.
+.. c:member:: Py_ssize_t PyTypeObject.tp_frees
 
-   .. versionadded:: 3.9 (the field exists since 3.8 but it's only used since 3.9)
+   Number of frees.
 
+.. c:member:: Py_ssize_t PyTypeObject.tp_maxalloc
+
+   Maximum simultaneously allocated objects.
+
+.. c:member:: PyTypeObject* PyTypeObject.tp_prev
+
+   Pointer to the previous type object with a non-zero :c:member:`~PyTypeObject.tp_allocs` field.
+
+.. c:member:: PyTypeObject* PyTypeObject.tp_next
+
+   Pointer to the next type object with a non-zero :c:member:`~PyTypeObject.tp_allocs` field.
 
 Also, note that, in a garbage collected Python, :c:member:`~PyTypeObject.tp_dealloc` may be called from
 any Python thread, not just the thread which created the object (if the object
@@ -2344,6 +2368,14 @@ Slot Type typedefs
    allocate additional memory; that should be done by :c:member:`~PyTypeObject.tp_new`.
 
 .. c:type:: void (*destructor)(PyObject *)
+
+.. c:type:: PyObject *(*vectorcallfunc)(PyObject *callable, PyObject *const *args, size_t nargsf, PyObject *kwnames)
+
+   See :c:member:`~PyTypeObject.tp_vectorcall_offset`.
+
+   Arguments to ``vectorcallfunc`` are the same as for :c:func:`_PyObject_Vectorcall`.
+
+   .. versionadded:: 3.8
 
 .. c:type:: void (*freefunc)(void *)
 

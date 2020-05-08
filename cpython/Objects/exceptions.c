@@ -8,8 +8,10 @@
 #include <Python.h>
 #include "pycore_initconfig.h"
 #include "pycore_object.h"
-#include "structmember.h"         // PyMemberDef
-#include "osdefs.h"               // SEP
+#include "pycore_pymem.h"
+#include "pycore_pystate.h"
+#include "structmember.h"
+#include "osdefs.h"
 
 
 /* Compatibility aliases */
@@ -304,33 +306,22 @@ static PyGetSetDef BaseException_getset[] = {
 };
 
 
-static inline PyBaseExceptionObject*
-_PyBaseExceptionObject_cast(PyObject *exc)
-{
-    assert(PyExceptionInstance_Check(exc));
-    return (PyBaseExceptionObject *)exc;
-}
-
-
 PyObject *
-PyException_GetTraceback(PyObject *self)
-{
-    PyBaseExceptionObject *base_self = _PyBaseExceptionObject_cast(self);
+PyException_GetTraceback(PyObject *self) {
+    PyBaseExceptionObject *base_self = (PyBaseExceptionObject *)self;
     Py_XINCREF(base_self->traceback);
     return base_self->traceback;
 }
 
 
 int
-PyException_SetTraceback(PyObject *self, PyObject *tb)
-{
-    return BaseException_set_tb(_PyBaseExceptionObject_cast(self), tb, NULL);
+PyException_SetTraceback(PyObject *self, PyObject *tb) {
+    return BaseException_set_tb((PyBaseExceptionObject *)self, tb, NULL);
 }
 
 PyObject *
-PyException_GetCause(PyObject *self)
-{
-    PyObject *cause = _PyBaseExceptionObject_cast(self)->cause;
+PyException_GetCause(PyObject *self) {
+    PyObject *cause = ((PyBaseExceptionObject *)self)->cause;
     Py_XINCREF(cause);
     return cause;
 }
@@ -339,15 +330,13 @@ PyException_GetCause(PyObject *self)
 void
 PyException_SetCause(PyObject *self, PyObject *cause)
 {
-    PyBaseExceptionObject *base_self = _PyBaseExceptionObject_cast(self);
-    base_self->suppress_context = 1;
-    Py_XSETREF(base_self->cause, cause);
+    ((PyBaseExceptionObject *)self)->suppress_context = 1;
+    Py_XSETREF(((PyBaseExceptionObject *)self)->cause, cause);
 }
 
 PyObject *
-PyException_GetContext(PyObject *self)
-{
-    PyObject *context = _PyBaseExceptionObject_cast(self)->context;
+PyException_GetContext(PyObject *self) {
+    PyObject *context = ((PyBaseExceptionObject *)self)->context;
     Py_XINCREF(context);
     return context;
 }
@@ -356,7 +345,7 @@ PyException_GetContext(PyObject *self)
 void
 PyException_SetContext(PyObject *self, PyObject *context)
 {
-    Py_XSETREF(_PyBaseExceptionObject_cast(self)->context, context);
+    Py_XSETREF(((PyBaseExceptionObject *)self)->context, context);
 }
 
 #undef PyExceptionClass_Name
@@ -364,7 +353,6 @@ PyException_SetContext(PyObject *self, PyObject *context)
 const char *
 PyExceptionClass_Name(PyObject *ob)
 {
-    assert(PyExceptionClass_Check(ob));
     return ((PyTypeObject*)ob)->tp_name;
 }
 
@@ -417,7 +405,7 @@ static PyTypeObject _PyExc_BaseException = {
     BaseException_new,          /* tp_new */
 };
 /* the CPython API expects exceptions to be (PyObject *) - both a hold-over
-from the previous implementation and also allowing Python objects to be used
+from the previous implmentation and also allowing Python objects to be used
 in the API */
 PyObject *PyExc_BaseException = (PyObject *)&_PyExc_BaseException;
 
@@ -887,7 +875,7 @@ oserror_init(PyOSErrorObject *self, PyObject **p_args,
 
     /* self->filename will remain Py_None otherwise */
     if (filename && filename != Py_None) {
-        if (Py_IS_TYPE(self, (PyTypeObject *) PyExc_BlockingIOError) &&
+        if (Py_TYPE(self) == (PyTypeObject *) PyExc_BlockingIOError &&
             PyNumber_Check(filename)) {
             /* BlockingIOError's 3rd argument can be the number of
              * characters written.
@@ -1391,7 +1379,7 @@ SyntaxError_init(PySyntaxErrorObject *self, PyObject *args, PyObject *kwds)
          * Only applies to SyntaxError instances, not to subclasses such
          * as TabError or IndentationError (see issue #31161)
          */
-        if (Py_IS_TYPE(self, (PyTypeObject *)PyExc_SyntaxError) &&
+        if ((PyObject*)Py_TYPE(self) == PyExc_SyntaxError &&
                 self->text && PyUnicode_Check(self->text) &&
                 _report_missing_parentheses(self) < 0) {
             return -1;
@@ -1440,7 +1428,7 @@ my_basename(PyObject *name)
 {
     Py_ssize_t i, size, offset;
     int kind;
-    const void *data;
+    void *data;
 
     if (PyUnicode_READY(name))
         return NULL;
@@ -1449,13 +1437,11 @@ my_basename(PyObject *name)
     size = PyUnicode_GET_LENGTH(name);
     offset = 0;
     for(i=0; i < size; i++) {
-        if (PyUnicode_READ(kind, data, i) == SEP) {
+        if (PyUnicode_READ(kind, data, i) == SEP)
             offset = i + 1;
-        }
     }
-    if (offset != 0) {
+    if (offset != 0)
         return PyUnicode_Substring(name, offset, size);
-    }
     else {
         Py_INCREF(name);
         return name;
@@ -2967,7 +2953,7 @@ _check_for_legacy_statements(PySyntaxErrorObject *self, Py_ssize_t start)
     static PyObject *exec_prefix = NULL;
     Py_ssize_t text_len = PyUnicode_GET_LENGTH(self->text), match;
     int kind = PyUnicode_KIND(self->text);
-    const void *data = PyUnicode_DATA(self->text);
+    void *data = PyUnicode_DATA(self->text);
 
     /* Ignore leading whitespace */
     while (start < text_len) {

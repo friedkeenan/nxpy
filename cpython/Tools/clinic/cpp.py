@@ -141,15 +141,23 @@ class Monitor:
         token = fields[0].lower()
         condition = ' '.join(fields[1:]).strip()
 
-        if token in {'if', 'ifdef', 'ifndef', 'elif'}:
+        if_tokens = {'if', 'ifdef', 'ifndef'}
+        all_tokens = if_tokens | {'elif', 'else', 'endif'}
+
+        if token not in all_tokens:
+            return
+
+        # cheat a little here, to reuse the implementation of if
+        if token == 'elif':
+            pop_stack()
+            token = 'if'
+
+        if token in if_tokens:
             if not condition:
                 self.fail("Invalid format for #" + token + " line: no argument!")
-            if token in {'if', 'elif'}:
+            if token == 'if':
                 if not self.is_a_simple_defined(condition):
                     condition = "(" + condition + ")"
-                if token == 'elif':
-                    previous_token, previous_condition = pop_stack()
-                    self.stack.append((previous_token, negate(previous_condition)))
             else:
                 fields = condition.split()
                 if len(fields) != 1:
@@ -158,21 +166,18 @@ class Monitor:
                 condition = 'defined(' + symbol + ')'
                 if token == 'ifndef':
                     condition = '!' + condition
-                token = 'if'
 
-            self.stack.append((token, condition))
-
-        elif token == 'else':
-            previous_token, previous_condition = pop_stack()
-            self.stack.append((previous_token, negate(previous_condition)))
-
-        elif token == 'endif':
-            while pop_stack()[0] != 'if':
-                pass
-
-        else:
+            self.stack.append(("if", condition))
+            if self.verbose:
+                print(self.status())
             return
 
+        previous_token, previous_condition = pop_stack()
+
+        if token == 'else':
+            self.stack.append(('else', negate(previous_condition)))
+        elif token == 'endif':
+            pass
         if self.verbose:
             print(self.status())
 

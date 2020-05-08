@@ -1,6 +1,7 @@
 /* ABCMeta implementation */
 
 #include "Python.h"
+#include "structmember.h"
 #include "clinic/_abc.c.h"
 
 /*[clinic input]
@@ -19,25 +20,12 @@ _Py_IDENTIFIER(_abc_impl);
 _Py_IDENTIFIER(__subclasscheck__);
 _Py_IDENTIFIER(__subclasshook__);
 
-typedef struct {
-    PyTypeObject *_abc_data_type;
-} _abcmodule_state;
-
 /* A global counter that is incremented each time a class is
    registered as a virtual subclass of anything.  It forces the
    negative cache to be cleared before its next use.
    Note: this counter is private. Use `abc.get_cache_token()` for
    external code. */
-// FIXME: PEP 573: Move abc_invalidation_counter into _abcmodule_state.
 static unsigned long long abc_invalidation_counter = 0;
-
-static inline _abcmodule_state*
-get_abc_state(PyObject *module)
-{
-    void *state = PyModule_GetState(module);
-    assert(state != NULL);
-    return (_abcmodule_state *)state;
-}
 
 /* This object stores internal state for ABCs.
    Note that we can use normal sets for caches,
@@ -50,31 +38,13 @@ typedef struct {
     unsigned long long _abc_negative_cache_version;
 } _abc_data;
 
-static int
-abc_data_traverse(_abc_data *self, visitproc visit, void *arg)
-{
-    Py_VISIT(self->_abc_registry);
-    Py_VISIT(self->_abc_cache);
-    Py_VISIT(self->_abc_negative_cache);
-    return 0;
-}
-
-static int
-abc_data_clear(_abc_data *self)
-{
-    Py_CLEAR(self->_abc_registry);
-    Py_CLEAR(self->_abc_cache);
-    Py_CLEAR(self->_abc_negative_cache);
-    return 0;
-}
-
 static void
 abc_data_dealloc(_abc_data *self)
 {
-    PyTypeObject *tp = Py_TYPE(self);
-    (void)abc_data_clear(self);
-    tp->tp_free(self);
-    Py_DECREF(tp);
+    Py_XDECREF(self->_abc_registry);
+    Py_XDECREF(self->_abc_cache);
+    Py_XDECREF(self->_abc_negative_cache);
+    Py_TYPE(self)->tp_free(self);
 }
 
 static PyObject *
@@ -95,31 +65,24 @@ abc_data_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 PyDoc_STRVAR(abc_data_doc,
 "Internal state held by ABC machinery.");
 
-static PyType_Slot _abc_data_type_spec_slots[] = {
-    {Py_tp_doc, (void *)abc_data_doc},
-    {Py_tp_new, abc_data_new},
-    {Py_tp_dealloc, abc_data_dealloc},
-    {Py_tp_traverse, abc_data_traverse},
-    {Py_tp_clear, abc_data_clear},
-    {0, 0}
-};
-
-static PyType_Spec _abc_data_type_spec = {
-    .name = "_abc._abc_data",
-    .basicsize = sizeof(_abc_data),
-    .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,
-    .slots = _abc_data_type_spec_slots,
+static PyTypeObject _abc_data_type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    "_abc_data",                        /*tp_name*/
+    sizeof(_abc_data),                  /*tp_basicsize*/
+    .tp_dealloc = (destructor)abc_data_dealloc,
+    .tp_flags = Py_TPFLAGS_DEFAULT,
+    .tp_alloc = PyType_GenericAlloc,
+    .tp_new = abc_data_new,
 };
 
 static _abc_data *
-_get_impl(PyObject *module, PyObject *self)
+_get_impl(PyObject *self)
 {
-    _abcmodule_state *state = get_abc_state(module);
     PyObject *impl = _PyObject_GetAttrId(self, &PyId__abc_impl);
     if (impl == NULL) {
         return NULL;
     }
-    if (!Py_IS_TYPE(impl, state->_abc_data_type)) {
+    if (Py_TYPE(impl) != &_abc_data_type) {
         PyErr_SetString(PyExc_TypeError, "_abc_impl is set to a wrong type");
         Py_DECREF(impl);
         return NULL;
@@ -216,7 +179,7 @@ static PyObject *
 _abc__reset_registry(PyObject *module, PyObject *self)
 /*[clinic end generated code: output=92d591a43566cc10 input=12a0b7eb339ac35c]*/
 {
-    _abc_data *impl = _get_impl(module, self);
+    _abc_data *impl = _get_impl(self);
     if (impl == NULL) {
         return NULL;
     }
@@ -243,7 +206,7 @@ static PyObject *
 _abc__reset_caches(PyObject *module, PyObject *self)
 /*[clinic end generated code: output=f296f0d5c513f80c input=c0ac616fd8acfb6f]*/
 {
-    _abc_data *impl = _get_impl(module, self);
+    _abc_data *impl = _get_impl(self);
     if (impl == NULL) {
         return NULL;
     }
@@ -278,7 +241,7 @@ static PyObject *
 _abc__get_dump(PyObject *module, PyObject *self)
 /*[clinic end generated code: output=9d9569a8e2c1c443 input=2c5deb1bfe9e3c79]*/
 {
-    _abc_data *impl = _get_impl(module, self);
+    _abc_data *impl = _get_impl(self);
     if (impl == NULL) {
         return NULL;
     }
@@ -428,14 +391,13 @@ static PyObject *
 _abc__abc_init(PyObject *module, PyObject *self)
 /*[clinic end generated code: output=594757375714cda1 input=8d7fe470ff77f029]*/
 {
-    _abcmodule_state *state = get_abc_state(module);
     PyObject *data;
     if (compute_abstract_methods(self) < 0) {
         return NULL;
     }
 
     /* Set up inheritance registry. */
-    data = abc_data_new(state->_abc_data_type, NULL, NULL);
+    data = abc_data_new(&_abc_data_type, NULL, NULL);
     if (data == NULL) {
         return NULL;
     }
@@ -484,7 +446,7 @@ _abc__abc_register_impl(PyObject *module, PyObject *self, PyObject *subclass)
     if (result < 0) {
         return NULL;
     }
-    _abc_data *impl = _get_impl(module, self);
+    _abc_data *impl = _get_impl(self);
     if (impl == NULL) {
         return NULL;
     }
@@ -518,7 +480,7 @@ _abc__abc_instancecheck_impl(PyObject *module, PyObject *self,
 /*[clinic end generated code: output=b8b5148f63b6b56f input=a4f4525679261084]*/
 {
     PyObject *subtype, *result = NULL, *subclass = NULL;
-    _abc_data *impl = _get_impl(module, self);
+    _abc_data *impl = _get_impl(self);
     if (impl == NULL) {
         return NULL;
     }
@@ -552,12 +514,12 @@ _abc__abc_instancecheck_impl(PyObject *module, PyObject *self,
             }
         }
         /* Fall back to the subclass check. */
-        result = _PyObject_CallMethodIdOneArg(self, &PyId___subclasscheck__,
-                                              subclass);
+        result = _PyObject_CallMethodIdObjArgs(self, &PyId___subclasscheck__,
+                                               subclass, NULL);
         goto end;
     }
-    result = _PyObject_CallMethodIdOneArg(self, &PyId___subclasscheck__,
-                                          subclass);
+    result = _PyObject_CallMethodIdObjArgs(self, &PyId___subclasscheck__,
+                                           subclass, NULL);
     if (result == NULL) {
         goto end;
     }
@@ -569,8 +531,8 @@ _abc__abc_instancecheck_impl(PyObject *module, PyObject *self,
         break;
     case 0:
         Py_DECREF(result);
-        result = _PyObject_CallMethodIdOneArg(self, &PyId___subclasscheck__,
-                                              subtype);
+        result = _PyObject_CallMethodIdObjArgs(self, &PyId___subclasscheck__,
+                                               subtype, NULL);
         break;
     case 1:  // Nothing to do.
         break;
@@ -614,7 +576,7 @@ _abc__abc_subclasscheck_impl(PyObject *module, PyObject *self,
     PyObject *ok, *subclasses = NULL, *result = NULL;
     Py_ssize_t pos;
     int incache;
-    _abc_data *impl = _get_impl(module, self);
+    _abc_data *impl = _get_impl(self);
     if (impl == NULL) {
         return NULL;
     }
@@ -651,8 +613,8 @@ _abc__abc_subclasscheck_impl(PyObject *module, PyObject *self,
     }
 
     /* 3. Check the subclass hook. */
-    ok = _PyObject_CallMethodIdOneArg((PyObject *)self, &PyId___subclasshook__,
-                                      subclass);
+    ok = _PyObject_CallMethodIdObjArgs((PyObject *)self, &PyId___subclasshook__,
+                                       subclass, NULL);
     if (ok == NULL) {
         goto end;
     }
@@ -833,7 +795,7 @@ _abc_get_cache_token_impl(PyObject *module)
     return PyLong_FromUnsignedLongLong(abc_invalidation_counter);
 }
 
-static struct PyMethodDef _abcmodule_methods[] = {
+static struct PyMethodDef module_functions[] = {
     _ABC_GET_CACHE_TOKEN_METHODDEF
     _ABC__ABC_INIT_METHODDEF
     _ABC__RESET_REGISTRY_METHODDEF
@@ -845,59 +807,26 @@ static struct PyMethodDef _abcmodule_methods[] = {
     {NULL,       NULL}          /* sentinel */
 };
 
-static int
-_abcmodule_exec(PyObject *module)
-{
-    _abcmodule_state *state = get_abc_state(module);
-    state->_abc_data_type = (PyTypeObject *)PyType_FromSpec(&_abc_data_type_spec);
-    if (state->_abc_data_type == NULL) {
-        return -1;
-    }
-
-    return 0;
-}
-
-static int
-_abcmodule_traverse(PyObject *module, visitproc visit, void *arg)
-{
-    _abcmodule_state *state = get_abc_state(module);
-    Py_VISIT(state->_abc_data_type);
-    return 0;
-}
-
-static int
-_abcmodule_clear(PyObject *module)
-{
-    _abcmodule_state *state = get_abc_state(module);
-    Py_CLEAR(state->_abc_data_type);
-    return 0;
-}
-
-static void
-_abcmodule_free(void *module)
-{
-    _abcmodule_clear((PyObject *)module);
-}
-
-static PyModuleDef_Slot _abcmodule_slots[] = {
-    {Py_mod_exec, _abcmodule_exec},
-    {0, NULL}
-};
-
 static struct PyModuleDef _abcmodule = {
     PyModuleDef_HEAD_INIT,
     "_abc",
     _abc__doc__,
-    sizeof(_abcmodule_state),
-    _abcmodule_methods,
-    _abcmodule_slots,
-    _abcmodule_traverse,
-    _abcmodule_clear,
-    _abcmodule_free,
+    -1,
+    module_functions,
+    NULL,
+    NULL,
+    NULL,
+    NULL
 };
+
 
 PyMODINIT_FUNC
 PyInit__abc(void)
 {
-    return PyModuleDef_Init(&_abcmodule);
+    if (PyType_Ready(&_abc_data_type) < 0) {
+        return NULL;
+    }
+    _abc_data_type.tp_doc = abc_data_doc;
+
+    return PyModule_Create(&_abcmodule);
 }

@@ -7,7 +7,6 @@ import select
 import socket
 import tempfile
 import threading
-from test import support
 
 
 class FunctionalTestCaseMixin:
@@ -50,7 +49,7 @@ class FunctionalTestCaseMixin:
     def tcp_server(self, server_prog, *,
                    family=socket.AF_INET,
                    addr=None,
-                   timeout=support.LOOPBACK_TIMEOUT,
+                   timeout=5,
                    backlog=1,
                    max_clients=10):
 
@@ -73,7 +72,7 @@ class FunctionalTestCaseMixin:
 
     def tcp_client(self, client_prog,
                    family=socket.AF_INET,
-                   timeout=support.LOOPBACK_TIMEOUT):
+                   timeout=10):
 
         sock = socket.socket(family, socket.SOCK_STREAM)
 
@@ -226,7 +225,7 @@ class TestThreadedServer(SocketThread):
     def run(self):
         try:
             with self._sock:
-                self._sock.setblocking(False)
+                self._sock.setblocking(0)
                 self._run()
         finally:
             self._s1.close()

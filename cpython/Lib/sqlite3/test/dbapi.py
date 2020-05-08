@@ -230,7 +230,7 @@ class CursorTests(unittest.TestCase):
             """)
 
     def CheckExecuteWrongSqlArg(self):
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             self.cu.execute(42)
 
     def CheckExecuteArgInt(self):
@@ -377,7 +377,7 @@ class CursorTests(unittest.TestCase):
         self.cu.executemany("insert into test(income) values (?)", mygen())
 
     def CheckExecuteManyWrongSqlArg(self):
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             self.cu.executemany(42, [(3,)])
 
     def CheckExecuteManySelect(self):

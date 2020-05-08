@@ -222,12 +222,10 @@ are always available.  They are listed here in alphabetical order.
    implied first argument.
 
    Class methods are different than C++ or Java static methods. If you want those,
-   see :func:`staticmethod` in this section.
+   see :func:`staticmethod`.
+
    For more information on class methods, see :ref:`types`.
 
-   .. versionchanged:: 3.9
-      Class methods can now wrap other :term:`descriptors <descriptor>` such as
-      :func:`property`.
 
 .. function:: compile(source, filename, mode, flags=0, dont_inherit=False, optimize=-1)
 
@@ -892,11 +890,6 @@ are always available.  They are listed here in alphabetical order.
    sequence (such as a string, bytes, tuple, list, or range) or a collection
    (such as a dictionary, set, or frozen set).
 
-   .. impl-detail::
-
-      ``len`` raises :exc:`OverflowError` on lengths larger than
-      :data:`sys.maxsize`, such as :class:`range(2 ** 100) <range>`.
-
 
 .. _func-list:
 .. class:: list([iterable])
@@ -1252,7 +1245,7 @@ are always available.  They are listed here in alphabetical order.
 
          * The file is now non-inheritable.
 
-   .. deprecated-removed:: 3.4 3.10
+   .. deprecated-removed:: 3.4 3.9
 
       The ``'U'`` mode.
 
@@ -1311,7 +1304,7 @@ are always available.  They are listed here in alphabetical order.
       the second argument to be negative, permitting computation of modular
       inverses.
 
-   .. versionchanged:: 3.8
+   .. versionchanged:: 3.9
       Allow keyword arguments.  Formerly, only positional arguments were
       supported.
 
@@ -1835,9 +1828,6 @@ are always available.  They are listed here in alphabetical order.
       Negative values for *level* are no longer supported (which also changes
       the default value to 0).
 
-   .. versionchanged:: 3.9
-      When the command line options :option:`-E` or :option:`-I` are being used,
-      the environment variable :envvar:`PYTHONCASEOK` is now ignored.
 
 .. rubric:: Footnotes
 

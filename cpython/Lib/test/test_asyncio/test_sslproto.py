@@ -2,7 +2,7 @@
 
 import logging
 import socket
-from test import support
+import sys
 import unittest
 import weakref
 from unittest import mock
@@ -15,7 +15,6 @@ import asyncio
 from asyncio import log
 from asyncio import protocols
 from asyncio import sslproto
-from test import support
 from test.test_asyncio import utils as test_utils
 from test.test_asyncio import functional as func_tests
 
@@ -163,7 +162,7 @@ class SslProtoHandshakeTests(test_utils.TestCase):
 class BaseStartTLS(func_tests.FunctionalTestCaseMixin):
 
     PAYLOAD_SIZE = 1024 * 100
-    TIMEOUT = support.LONG_TIMEOUT
+    TIMEOUT = 60
 
     def new_loop(self):
         raise NotImplementedError
@@ -273,8 +272,7 @@ class BaseStartTLS(func_tests.FunctionalTestCaseMixin):
 
         with self.tcp_server(serve, timeout=self.TIMEOUT) as srv:
             self.loop.run_until_complete(
-                asyncio.wait_for(client(srv.addr),
-                                 timeout=support.SHORT_TIMEOUT))
+                asyncio.wait_for(client(srv.addr), timeout=10))
 
         # No garbage is left if SSL is closed uncleanly
         client_context = weakref.ref(client_context)
@@ -335,8 +333,7 @@ class BaseStartTLS(func_tests.FunctionalTestCaseMixin):
 
         with self.tcp_server(serve, timeout=self.TIMEOUT) as srv:
             self.loop.run_until_complete(
-                asyncio.wait_for(client(srv.addr),
-                                 timeout=support.SHORT_TIMEOUT))
+                asyncio.wait_for(client(srv.addr), timeout=10))
 
         # No garbage is left for SSL client from loop.create_connection, even
         # if user stores the SSLTransport in corresponding protocol instance
@@ -492,8 +489,7 @@ class BaseStartTLS(func_tests.FunctionalTestCaseMixin):
 
         with self.tcp_server(serve, timeout=self.TIMEOUT) as srv:
             self.loop.run_until_complete(
-                asyncio.wait_for(client(srv.addr),
-                                 timeout=support.SHORT_TIMEOUT))
+                asyncio.wait_for(client(srv.addr), timeout=10))
 
     def test_start_tls_server_1(self):
         HELLO_MSG = b'1' * self.PAYLOAD_SIZE
@@ -621,7 +617,7 @@ class BaseStartTLS(func_tests.FunctionalTestCaseMixin):
                     *addr,
                     ssl=client_sslctx,
                     server_hostname='',
-                    ssl_handshake_timeout=support.SHORT_TIMEOUT),
+                    ssl_handshake_timeout=10.0),
                 0.5)
 
         with self.tcp_server(server,
@@ -703,7 +699,7 @@ class BaseStartTLS(func_tests.FunctionalTestCaseMixin):
                     ssl=client_sslctx,
                     server_hostname='',
                     loop=self.loop,
-                    ssl_handshake_timeout=support.LOOPBACK_TIMEOUT)
+                    ssl_handshake_timeout=1.0)
 
         with self.tcp_server(server,
                              max_clients=1,

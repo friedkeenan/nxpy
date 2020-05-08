@@ -50,7 +50,7 @@ class ClearTest(unittest.TestCase):
             nonlocal endly
             try:
                 yield
-                self.inner()
+                inner()
             finally:
                 endly = True
         gen = g()

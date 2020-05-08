@@ -19,8 +19,6 @@ in :pep:`557`.
 The member variables to use in these generated methods are defined
 using :pep:`526` type annotations.  For example this code::
 
-  from dataclasses import dataclass
-
   @dataclass
   class InventoryItem:
       '''Class for keeping track of an item in inventory.'''
@@ -359,7 +357,7 @@ Module-level decorators, classes, and functions
          def add_one(self):
              return self.x + 1
 
-.. function:: replace(instance, /, **changes)
+.. function:: replace(instance, **changes)
 
    Creates a new object of the same type of ``instance``, replacing
    fields with values from ``changes``.  If ``instance`` is not a Data

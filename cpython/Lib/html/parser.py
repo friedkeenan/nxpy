@@ -9,6 +9,7 @@
 
 
 import re
+import warnings
 import _markupbase
 
 from html import unescape
@@ -460,3 +461,10 @@ class HTMLParser(_markupbase.ParserBase):
 
     def unknown_decl(self, data):
         pass
+
+    # Internal -- helper to remove special character quoting
+    def unescape(self, s):
+        warnings.warn('The unescape method is deprecated and will be removed '
+                      'in 3.5, use html.unescape() instead.',
+                      DeprecationWarning, stacklevel=2)
+        return unescape(s)
