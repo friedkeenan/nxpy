@@ -1,0 +1,13 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/python/cpython
+	branch = master
+	commit = 81a5fc38e81b424869f4710f48e9371dfa2d3b77
+	parent = e614d360f3573f0a01c71f3cdd29d00c2436208d
+	method = merge
+	update = auto
+	cmdver = 0.4.1
