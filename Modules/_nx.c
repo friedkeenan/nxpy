@@ -74,8 +74,7 @@ static PyObject *nx_svcSleepThread(PyObject *self, PyObject *args) {
 
     #endif
 
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 static PyMethodDef NxMethods[] = {

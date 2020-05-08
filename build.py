@@ -18,8 +18,6 @@ nx_ext = Extension("_nx",
 )
 
 setup(
-    name = "nx",
-    version = "0.1.0",
-    description = "fuck blah fuck",
+    name = "_nx",
     ext_modules = [nx_ext],
 )
