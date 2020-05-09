@@ -16,6 +16,9 @@
 #  if defined(HAVE_SYS_RANDOM_H) && (defined(HAVE_GETRANDOM) || defined(HAVE_GETENTROPY))
 #    include <sys/random.h>
 #  endif
+#  ifdef __SWITCH__
+#    include <switch/kernel/random.h>
+#  endif
 #  if !defined(HAVE_GETRANDOM) && defined(HAVE_GETRANDOM_SYSCALL)
 #    include <sys/syscall.h>
 #  endif
@@ -496,6 +499,11 @@ pyurandom(void *buffer, Py_ssize_t size, int blocking, int raise)
 #ifdef MS_WINDOWS
     return win32_urandom((unsigned char *)buffer, size, raise);
 #else
+
+#ifdef __SWITCH__
+    randomGet(buffer, size);
+    return 0;
+#endif
 
 #if defined(PY_GETRANDOM) || defined(PY_GETENTROPY)
 #ifdef PY_GETRANDOM

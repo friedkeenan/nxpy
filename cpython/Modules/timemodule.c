@@ -42,6 +42,10 @@
 #define _Py_timezone _timezone
 #define _Py_daylight _daylight
 #define _Py_tzname _tzname
+#elif defined(__SWITCH__)
+#define _Py_timezone 0
+#define _Py_daylight 0
+#define _Py_tzname ((char*[]){"GMT", "UTC"}) /* XXX: dirty hack */
 #else
 #define _Py_timezone timezone
 #define _Py_daylight daylight

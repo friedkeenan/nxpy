@@ -3274,6 +3274,9 @@ then
 	*-*-vxworks*)
 	    ac_sys_system=VxWorks
 	    ;;
+    aarch64-none-elf*)
+        ac_sys_system=Horizon
+        ;;
 	*)
 		# for now, limit cross builds to known configurations
 		MACHDEP="unknown"
@@ -3324,6 +3327,9 @@ if test "$cross_compiling" = yes; then
 	*-*-vxworks*)
 		_host_cpu=$host_cpu
 		;;
+    aarch64-none-elf*)
+        _host_cpu=$host_cpu
+        ;;
 	*)
 		# for now, limit cross builds to known configurations
 		MACHDEP="unknown"
