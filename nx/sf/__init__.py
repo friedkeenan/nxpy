@@ -1,5 +1,6 @@
 import enum
 from ctypes import *
+import _ctypes
 
 from .. import util
 
@@ -24,9 +25,6 @@ class OutHandleAttr(enum.Enum):
     HipcMove = 2
 
 class Buffer:
-    PointerType = POINTER(c_uint8).__bases__[0]
-    ArrayType   = (c_uint8 * 0).__bases__[0]
-
     def __init__(self, ptr=None, size=0):
         self.ptr_orig = ptr
 
@@ -40,9 +38,9 @@ class Buffer:
 
     @property
     def contents(self):
-        if isinstance(self.ptr_orig, self.PointerType):
+        if isinstance(self.ptr_orig, _ctypes._Pointer):
             return self.ptr_orig.contents
-        elif isinstance(self.ptr_orig, self.ArrayType):
+        elif isinstance(self.ptr_orig, _ctypes.Array):
             if len(self.ptr_orig) > 0 and isinstance(self.ptr_orig[0], bytes):
                 return b"".join(self.ptr_orig)
 

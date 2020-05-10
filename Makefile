@@ -22,8 +22,12 @@ clean:
 	@rm -f cpython/Makefile
 
 cpython/libpython3.8.a: cpython/Makefile
+	@cp Modules/_nxmodule.c cpython/Modules
+	@cat Modules/Setup > cpython/Modules/Setup.local
+
 	$(MAKE) -C cpython
 	
+	@rm -rf application/libs/python
 	@mkdir -p application/libs/python/lib
 	@cp $@ application/libs/python/lib
 	@cp -r cpython/Include application/libs/python/include

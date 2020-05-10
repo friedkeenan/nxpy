@@ -185,6 +185,11 @@ _heapq _heapqmodule.c	# Heap queue algorithm
 _asyncio _asynciomodule.c  # Fast asyncio Future
 _json -I$(srcdir)/Include/internal -DPy_BUILD_CORE_BUILTIN _json.c	# _json speedups
 
+_bz2 _bz2module.c -lbz2
+_lzma _lzmamodule.c -llzma
+
+_ctypes _ctypes/_ctypes.c _ctypes/callbacks.c _ctypes/callproc.c _ctypes/stgdict.c _ctypes/cfield.c
+
 unicodedata unicodedata.c    # static Unicode character database
 
 
@@ -358,8 +363,6 @@ _codecs_tw cjkcodecs/_codecs_tw.c
 
 # Another example -- the 'xxsubtype' module shows C-level subtyping in action
 xxsubtype xxsubtype.c
-
-_nx _nxmodule.c -D__SWITCH__ -lnx
 
 # Uncommenting the following line tells makesetup that all following modules
 # are not built (see above for more detail).

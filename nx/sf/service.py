@@ -1,5 +1,6 @@
 import enum
 from ctypes import *
+import _ctypes
 
 from .. import arm, util
 from ..types import HosVersion
@@ -157,7 +158,7 @@ class Service:
                 elif isinstance(first, type):
                     size = sizeof(first)
 
-                    if Buffer.ArrayType in first.__bases__:
+                    if _ctypes.Array in first.__bases__:
                         first = first()
                     else:
                         first = pointer(first())
