@@ -5,7 +5,7 @@
 extern "C" {
 #endif /* __cplusplus */
 
-#if !defined(MS_WIN32) && !defined(__SWITCH__)
+#ifndef MS_WIN32
 
 #include <dlfcn.h>
 
@@ -19,7 +19,7 @@ extern "C" {
 
 #endif /* !CTYPES_DARWIN_DLFCN */
 
-#endif /* !MS_WIN32 && !__SWITCH__*/
+#endif /* !MS_WIN32 */
 
 #ifdef __cplusplus
 }

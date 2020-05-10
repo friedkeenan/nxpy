@@ -188,7 +188,7 @@ _json -I$(srcdir)/Include/internal -DPy_BUILD_CORE_BUILTIN _json.c	# _json speed
 _bz2 _bz2module.c -lbz2
 _lzma _lzmamodule.c -llzma
 
-_ctypes _ctypes/_ctypes.c _ctypes/callbacks.c _ctypes/callproc.c _ctypes/stgdict.c _ctypes/cfield.c
+_ctypes _ctypes/_ctypes.c _ctypes/callbacks.c _ctypes/callproc.c _ctypes/stgdict.c _ctypes/cfield.c -lffi
 
 unicodedata unicodedata.c    # static Unicode character database
 

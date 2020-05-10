@@ -60,7 +60,7 @@
 #ifdef MS_WIN32
 #include <windows.h>
 #include <tchar.h>
-#else
+#elif !defined(__SWITCH__)
 #include "ctypes_dlfcn.h"
 #endif
 
@@ -1380,7 +1380,7 @@ copy_com_pointer(PyObject *self, PyObject *args)
     Py_XDECREF(b.keep);
     return r;
 }
-#else
+#elif !defined(__SWITCH__)
 
 static PyObject *py_dl_open(PyObject *self, PyObject *args)
 {
@@ -1891,7 +1891,7 @@ PyMethodDef _ctypes_module_methods[] = {
     {"LoadLibrary", load_library, METH_VARARGS, load_library_doc},
     {"FreeLibrary", free_library, METH_VARARGS, free_library_doc},
     {"_check_HRESULT", check_hresult, METH_VARARGS},
-#else
+#elif !defined(__SWITCH__)
     {"dlopen", py_dl_open, METH_VARARGS,
      "dlopen(name, flag={RTLD_GLOBAL|RTLD_LOCAL}) open a shared library"},
     {"dlclose", py_dl_close, METH_VARARGS, "dlclose a library"},

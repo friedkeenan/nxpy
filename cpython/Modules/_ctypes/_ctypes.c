@@ -111,7 +111,7 @@ bytes(cdata)
 #ifndef IS_INTRESOURCE
 #define IS_INTRESOURCE(x) (((size_t)(x) >> 16) == 0)
 #endif
-#else
+#elif !defined(__SWITCH__)
 #include "ctypes_dlfcn.h"
 #endif
 #include "ctypes.h"
@@ -712,6 +712,7 @@ CDataType_from_buffer_copy(PyObject *type, PyObject *args)
     return result;
 }
 
+#ifndef __SWITCH__
 static const char in_dll_doc[] =
 "C.in_dll(dll, name) -> C instance\naccess a C instance in a dll";
 
@@ -773,6 +774,7 @@ CDataType_in_dll(PyObject *type, PyObject *args)
 #endif
     return PyCData_AtAddress(type, address);
 }
+#endif /* !__SWITCH__ */
 
 static const char from_param_doc[] =
 "Convert a Python object into a function call parameter.";
@@ -834,7 +836,9 @@ static PyMethodDef CDataType_methods[] = {
     { "from_address", CDataType_from_address, METH_O, from_address_doc },
     { "from_buffer", CDataType_from_buffer, METH_VARARGS, from_buffer_doc, },
     { "from_buffer_copy", CDataType_from_buffer_copy, METH_VARARGS, from_buffer_copy_doc, },
+#ifndef __SWITCH__
     { "in_dll", CDataType_in_dll, METH_VARARGS, in_dll_doc },
+#endif
     { NULL, NULL },
 };
 
@@ -1202,7 +1206,9 @@ static PyMethodDef PyCPointerType_methods[] = {
     { "from_address", CDataType_from_address, METH_O, from_address_doc },
     { "from_buffer", CDataType_from_buffer, METH_VARARGS, from_buffer_doc, },
     { "from_buffer_copy", CDataType_from_buffer_copy, METH_VARARGS, from_buffer_copy_doc, },
+#ifndef __SWITCH__
     { "in_dll", CDataType_in_dll, METH_VARARGS, in_dll_doc},
+#endif
     { "from_param", (PyCFunction)PyCPointerType_from_param, METH_O, from_param_doc},
     { "set_type", (PyCFunction)PyCPointerType_set_type, METH_O },
     { NULL, NULL },
@@ -2320,7 +2326,9 @@ static PyMethodDef PyCSimpleType_methods[] = {
     { "from_address", CDataType_from_address, METH_O, from_address_doc },
     { "from_buffer", CDataType_from_buffer, METH_VARARGS, from_buffer_doc, },
     { "from_buffer_copy", CDataType_from_buffer_copy, METH_VARARGS, from_buffer_copy_doc, },
+#ifndef __SWITCH__
     { "in_dll", CDataType_in_dll, METH_VARARGS, in_dll_doc},
+#endif
     { NULL, NULL },
 };
 
@@ -3539,6 +3547,7 @@ _get_name(PyObject *obj, const char **pname)
 }
 
 
+#ifndef __SWITCH__
 static PyObject *
 PyCFuncPtr_FromDll(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
@@ -3658,6 +3667,7 @@ PyCFuncPtr_FromDll(PyTypeObject *type, PyObject *args, PyObject *kwds)
     self->callable = (PyObject *)self;
     return (PyObject *)self;
 }
+#endif /* !__SWITCH__ */
 
 #ifdef MS_WIN32
 static PyObject *
@@ -3712,8 +3722,10 @@ PyCFuncPtr_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (PyTuple_GET_SIZE(args) == 0)
         return GenericPyCData_new(type, args, kwds);
 
+#ifndef __SWITCH__
     if (1 <= PyTuple_GET_SIZE(args) && PyTuple_Check(PyTuple_GET_ITEM(args, 0)))
         return PyCFuncPtr_FromDll(type, args, kwds);
+#endif
 
 #ifdef MS_WIN32
     if (2 <= PyTuple_GET_SIZE(args) && PyLong_Check(PyTuple_GET_ITEM(args, 0)))
