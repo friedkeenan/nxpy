@@ -18,6 +18,7 @@ all: cpython/libpython3.8.a
 	$(MAKE) -C application
 
 clean:
+	$(MAKE) -C application clean
 	$(MAKE) -C cpython clean
 	@rm -f cpython/Makefile
 
