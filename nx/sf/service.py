@@ -88,15 +88,15 @@ class Service:
     def make_request(self, base, request_id, context, data_size,
                         send_pid, buffers, objects, handles):
         fmt = cmif.RequestFormat(
-                object_id = self.object_id,
-                request_id = request_id,
-                context = context,
-                data_size = data_size,
-                server_pointer_size = self.pointer_buffer_size,
-                num_objects = len(objects),
-                num_handles = len(handles),
-                send_pid = send_pid,
-            )
+            object_id = self.object_id,
+            request_id = request_id,
+            context = context,
+            data_size = data_size,
+            server_pointer_size = self.pointer_buffer_size,
+            num_objects = len(objects),
+            num_handles = len(handles),
+            send_pid = send_pid,
+        )
 
         for _, attr in buffers:
             fmt.process_buffer(attr)

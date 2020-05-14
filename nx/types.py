@@ -42,10 +42,33 @@ class ResultException(Exception):
         self.result = result
 
 class HosVersion:
+    class Range:
+        def __init__(self, a, b=None):
+            if b is None:
+                b = a
+                a = HosVersion(0,0,0)
+
+            if not isinstance(a, HosVersion):
+                a = HosVersion(*a)
+            if not isinstance(b, HosVersion):
+                b = HosVersion(*b)
+
+            self.a = a.packed
+            self.b = b.packed
+
+        def __contains__(self, key):
+            if not isinstance(key, HosVersion):
+                key = HosVersion(*key)
+
+            return self.a <= key.packed <= self.b
+
     def __init__(self, major, minor, micro):
         self.major = major
         self.minor = minor
         self.micro = micro
+
+    def in_range(self, a, b=None):
+        return self in self.Range(a, b)
 
     @property
     def packed(self):
